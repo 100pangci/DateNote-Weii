@@ -1,6 +1,10 @@
-# 维来可期
+<p align="center">
+  <img src="docs/weilai-logo.svg" alt="维来可期 Logo" width="180">
+</p>
 
-> 把每一份期待，都好好安排
+<h1 align="center">维来可期</h1>
+
+<p align="center">把每一份期待，都好好安排</p>
 
 “维来可期”取自“未来可期”，是一个支持自然语言录入、日历查看和到期提醒的轻量个人排期应用。
 
@@ -50,6 +54,12 @@
 ## 构建与安装
 
 使用 Android Studio 打开项目根目录，等待 Gradle 同步后运行 `app` 配置即可。
+
+### GitHub Actions 与自动发布
+
+- 推送到 `main` 会自动执行单元测试、Lint 和 Debug 构建，并上传 Debug APK artifact。
+- 推送形如 `v0.1.0` 的 Tag 会自动构建 Release APK，并使用 `CHANGELOG.md` 创建 GitHub Release。
+- 如需让 GitHub Actions 生成签名 APK，请在仓库 Secrets 中配置 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS` 和 `ANDROID_KEY_PASSWORD`。未配置时仍会生成 Release 构建产物，但不会使用正式签名。
 
 命令行构建 Debug APK：
 

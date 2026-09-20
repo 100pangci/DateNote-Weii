@@ -5,6 +5,7 @@ package com.datenote.app.ui.settings
 import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -492,11 +494,24 @@ fun SettingsAboutScreen(onBack: () -> Unit) {
     SettingsDetailScaffold(stringResource(R.string.settings_about), onBack) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 36.dp, vertical = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
         ) {
+            Image(
+                painter = androidx.compose.ui.res.painterResource(R.drawable.ic_launcher),
+                contentDescription = stringResource(R.string.app_name),
+                modifier = Modifier.size(160.dp),
+            )
+            Spacer(Modifier.height(20.dp))
             Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.height(4.dp))
             Text(stringResource(R.string.app_subtitle), style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(R.string.about_description), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(12.dp))
+            Text(
+                stringResource(R.string.about_description),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
             Spacer(Modifier.height(8.dp))
             Text(stringResource(R.string.version_name, BuildConfig.VERSION_NAME), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

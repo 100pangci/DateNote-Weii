@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">维来可期应用图标</title>
+  <desc id="desc">粉紫色背景上的奶白日历，中央是一颗微笑的金色星星，右下角带有完成勾。</desc>
+
+  <defs>
+    <linearGradient id="background" x1="128" y1="96" x2="896" y2="944" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#B79CFF"/>
+      <stop offset="0.55" stop-color="#927CF4"/>
+      <stop offset="1" stop-color="#7563E9"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="512" y1="184" x2="512" y2="842" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFDF9"/>
+      <stop offset="1" stop-color="#FFF5ED"/>
+    </linearGradient>
+    <linearGradient id="star" x1="401" y1="386" x2="647" y2="674" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFE99B"/>
+      <stop offset="1" stop-color="#FFC95C"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="24" y="24" width="976" height="976" rx="238" fill="url(#background)"/>
+
+  <circle cx="160" cy="258" r="34" fill="#FFFFFF" opacity="0.13"/>
+  <circle cx="864" cy="716" r="48" fill="#FFD8E4" opacity="0.19"/>
+  <path d="M824 170v70M789 205h70" stroke="#FFF5C9" stroke-width="22" stroke-linecap="round" opacity="0.7"/>
+  <path d="M152 750v54M125 777h54" stroke="#FFD5E2" stroke-width="18" stroke-linecap="round" opacity="0.75"/>
+
+  <rect x="184" y="207" width="656" height="656" rx="142" fill="#493A91" opacity="0.22"/>
+  <rect x="184" y="184" width="656" height="656" rx="142" fill="url(#paper)"/>
+  <path d="M184 326V302c0-65 53-118 118-118h420c65 0 118 53 118 118v24H184Z" fill="#FFB9CF"/>
+  <path d="M184 326h656" stroke="#514A73" stroke-width="20" opacity="0.16"/>
+
+  <g fill="#FFF8F4" stroke="#514A73" stroke-width="20">
+    <rect x="307" y="128" width="76" height="158" rx="38"/>
+    <rect x="641" y="128" width="76" height="158" rx="38"/>
+  </g>
+  <g fill="#8B76EF">
+    <circle cx="345" cy="244" r="18"/>
+    <circle cx="679" cy="244" r="18"/>
+  </g>
+
+  <path d="M318 601c-55 40-91 86-100 137" fill="none" stroke="#FFB9CF" stroke-width="31" stroke-linecap="round"/>
+  <path d="M351 638c-40 31-62 62-70 94" fill="none" stroke="#FFD66B" stroke-width="18" stroke-linecap="round"/>
+
+  <path d="M512 390c12 0 23 7 29 18l44 90 99 14c13 2 24 11 28 24 4 12 0 26-9 35l-72 70 17 99c2 13-3 26-14 34-10 8-24 9-36 3l-88-46-88 46c-12 6-26 5-36-3-11-8-16-21-14-34l17-99-72-70c-9-9-13-23-9-35 4-13 15-22 28-24l99-14 44-90c6-11 17-18 29-18Z" fill="#6B55BA" opacity="0.2"/>
+  <path d="M512 374c12 0 23 7 29 18l44 90 99 14c13 2 24 11 28 24 4 12 0 26-9 35l-72 70 17 99c2 13-3 26-14 34-10 8-24 9-36 3l-88-46-88 46c-12 6-26 5-36-3-11-8-16-21-14-34l17-99-72-70c-9-9-13-23-9-35 4-13 15-22 28-24l99-14 44-90c6-11 17-18 29-18Z" fill="url(#star)" stroke="#514A73" stroke-width="24" stroke-linejoin="round"/>
+
+  <ellipse cx="461" cy="566" rx="18" ry="25" fill="#514A73"/>
+  <ellipse cx="563" cy="566" rx="18" ry="25" fill="#514A73"/>
+  <path d="M466 624c28 26 64 26 92 0" fill="none" stroke="#514A73" stroke-width="18" stroke-linecap="round"/>
+  <ellipse cx="416" cy="610" rx="25" ry="14" fill="#F49AB7" opacity="0.82"/>
+  <ellipse cx="608" cy="610" rx="25" ry="14" fill="#F49AB7" opacity="0.82"/>
+
+  <circle cx="726" cy="739" r="98" fill="#6B55BA" opacity="0.22"/>
+  <circle cx="726" cy="725" r="98" fill="#8B7CF6" stroke="#FFF9F3" stroke-width="24"/>
+  <path d="M678 725l31 32 65-72" fill="none" stroke="#FFF9F3" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
