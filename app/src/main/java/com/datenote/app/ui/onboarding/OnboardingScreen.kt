@@ -25,8 +25,11 @@ import androidx.compose.ui.unit.dp
 import com.datenote.app.R
 
 @Composable
-fun OnboardingScreen(onNicknameSaved: (String) -> Unit) {
-    var nickname by rememberSaveable { mutableStateOf("") }
+fun OnboardingScreen(
+    initialNickname: String = "",
+    onNicknameSaved: (String) -> Unit,
+) {
+    var nickname by rememberSaveable { mutableStateOf(initialNickname) }
     var submitted by rememberSaveable { mutableStateOf(false) }
     val trimmed = nickname.trim()
     val length = trimmed.codePointCount(0, trimmed.length)

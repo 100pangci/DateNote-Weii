@@ -200,7 +200,10 @@ private fun StartupContent(
             contentAlignment = Alignment.Center,
         ) { CircularProgressIndicator() }
 
-        AppStartupState.NeedsOnboarding -> OnboardingScreen(onNicknameSaved = onNicknameSaved)
+        AppStartupState.NeedsOnboarding -> OnboardingScreen(
+            initialNickname = if (BuildConfig.WEII_PRECONFIGURED) BuildConfig.WEII_NICKNAME else "",
+            onNicknameSaved = onNicknameSaved,
+        )
         AppStartupState.Ready -> {
             MainShell(
                 nickname = preferences.nickname,

@@ -49,6 +49,7 @@ val weiiEnv = if (weiiBuildEnabled) loadDotEnv(rootProject.file(".env")) else em
 val weiiBaseUrl = weiiEnv.firstValue("WEII_AI_BASE_URL")
 val weiiApiKey = weiiEnv.firstValue("WEII_AI_API_KEY")
 val weiiModel = weiiEnv.firstValue("WEII_AI_MODEL")
+val weiiNickname = weiiEnv.firstValue("WEII_NICKNAME")
 
 if (weiiBuildEnabled) {
     require(weiiBaseUrl.isNotBlank()) { "-Pweii requires WEII_AI_BASE_URL in the root .env file" }
@@ -88,6 +89,7 @@ android {
         buildConfigField("String", "WEII_AI_BASE_URL", buildConfigString(weiiBaseUrl))
         buildConfigField("String", "WEII_AI_API_KEY", buildConfigString(weiiApiKey))
         buildConfigField("String", "WEII_AI_MODEL", buildConfigString(weiiModel))
+        buildConfigField("String", "WEII_NICKNAME", buildConfigString(weiiNickname))
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

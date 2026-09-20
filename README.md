@@ -102,9 +102,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 WEII_AI_BASE_URL = "https://example.com/v1"
 WEII_AI_API_KEY = "your-api-key"
 WEII_AI_MODEL = "your-model"
+WEII_NICKNAME = "她的昵称"
 ```
 
-使用 `-Pweii` 编译时才会读取这三个键：
+使用 `-Pweii` 编译时才会读取这些键。`WEII_NICKNAME` 可选；首次进入引导页时会预填，但用户仍可以修改：
 
 ```bash
 ./gradlew -Pweii assembleRelease
