@@ -272,10 +272,13 @@ private fun DraftCard(draft: EditableAiDraft, onChange: (EditableAiDraft) -> Uni
                     onClick = { datePickerTarget = AiDateTarget.END },
                 )
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(draft.time, { onChange(draft.copy(time = it)) }, Modifier.weight(1f), label = { Text(stringResource(R.string.ai_time)) }, singleLine = true)
-                Spacer(Modifier.weight(1f))
-            }
+            OutlinedTextField(
+                draft.time,
+                { onChange(draft.copy(time = it)) },
+                Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.ai_time)) },
+                singleLine = true,
+            )
             OutlinedTextField(draft.category, { onChange(draft.copy(category = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.ai_category)) }, singleLine = true)
             OutlinedTextField(draft.note, { onChange(draft.copy(note = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.ai_note)) }, minLines = 2)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

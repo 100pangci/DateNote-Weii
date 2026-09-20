@@ -25,7 +25,9 @@ import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -300,36 +302,41 @@ fun SettingsReliabilityScreen(
             val reliability = state.reliability
             item {
                 ReliabilityListItem(
+                    icon = Icons.Default.Notifications,
                     title = stringResource(R.string.reliability_notification_permission),
                     value = if (reliability?.notificationStatus?.permissionGranted == true && reliability.notificationStatus.appNotificationsEnabled) stringResource(R.string.reliability_enabled) else stringResource(R.string.reliability_not_enabled),
                     enabled = reliability?.notificationStatus?.permissionGranted == true && reliability.notificationStatus.appNotificationsEnabled,
+                    onClick = onRequestNotifications,
                 )
             }
             item {
                 ReliabilityListItem(
+                    icon = Icons.Default.NotificationsActive,
                     title = stringResource(R.string.reliability_channel),
                     value = if (reliability?.notificationStatus?.channelEnabled == true) stringResource(R.string.reliability_available) else stringResource(R.string.reliability_closed),
                     enabled = reliability?.notificationStatus?.channelEnabled == true,
+                    onClick = { ReminderSettings.openNotificationSettings(context) },
                 )
             }
             item {
                 ReliabilityListItem(
+                    icon = Icons.Default.BatteryChargingFull,
                     title = stringResource(R.string.reliability_battery),
                     value = if (reliability?.batteryOptimizationIgnored == true) stringResource(R.string.reliability_battery_ok) else stringResource(R.string.reliability_battery_limited),
                     enabled = reliability?.batteryOptimizationIgnored == true,
+                    onClick = { ReminderSettings.openBatterySettings(context) },
                 )
             }
             item {
                 ReliabilityListItem(
+                    icon = Icons.Default.PowerSettingsNew,
                     title = stringResource(R.string.reliability_autostart),
                     value = stringResource(R.string.reliability_manual),
                     enabled = null,
+                    onClick = { ReminderSettings.openAppDetails(context) },
                 )
             }
             item { Text(stringResource(R.string.reliability_background_hint), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            item { Button(onClick = onRequestNotifications, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.reliability_check_notifications)) } }
-            item { Button(onClick = { ReminderSettings.openAppDetails(context) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.reliability_check_background)) } }
-            item { Button(onClick = { ReminderSettings.openBatterySettings(context) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.reliability_check_battery)) } }
             item { TextButton(onClick = { guideVisible = true }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.reliability_view_guide)) } }
         }
     }
@@ -344,8 +351,15 @@ fun SettingsReliabilityScreen(
 }
 
 @Composable
-private fun ReliabilityListItem(title: String, value: String, enabled: Boolean?) {
+private fun ReliabilityListItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    value: String,
+    enabled: Boolean?,
+    onClick: () -> Unit,
+) {
     ListItem(
+        modifier = Modifier.clickable(onClick = onClick),
         headlineContent = { Text(title) },
         supportingContent = {
             Text(
@@ -357,7 +371,7 @@ private fun ReliabilityListItem(title: String, value: String, enabled: Boolean?)
                 },
             )
         },
-        leadingContent = { Icon(Icons.Default.Notifications, contentDescription = null) },
+        leadingContent = { Icon(icon, contentDescription = null) },
     )
 }
 

@@ -23,11 +23,13 @@ class HomeViewModel(
     private val reminderScheduler: ReminderScheduler,
     private val defaultReminderTimeMinutes: Int,
 ) : ViewModel() {
-    private val selectedDate = MutableStateFlow(LocalDate.now())
-    private val displayedMonth = MutableStateFlow(YearMonth.now())
+    private val initialDate = LocalDate.now()
+    private val _selectedDate = MutableStateFlow<LocalDate?>(initialDate)
+    private val _displayedMonth = MutableStateFlow(YearMonth.from(initialDate))
+    private val selectedDatesByMonth = mutableMapOf(YearMonth.from(initialDate) to initialDate)
 
-    val selectedDay: StateFlow<LocalDate> = selectedDate
-    val month: StateFlow<YearMonth> = displayedMonth
+    val selectedDate: StateFlow<LocalDate?> = _selectedDate
+    val displayedMonth: StateFlow<YearMonth> = _displayedMonth
 
     /**
      * Keep one observation for the calendar instead of starting a Room query for
@@ -38,32 +40,38 @@ class HomeViewModel(
 
     val monthSchedules: StateFlow<List<ScheduleWithSteps>> = combine(
         allSchedulesWithSteps,
-        displayedMonth,
+        _displayedMonth,
     ) { schedules, value -> schedulesForMonth(schedules, value) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val selectedSchedules: StateFlow<List<ScheduleWithSteps>> = combine(
         allSchedulesWithSteps,
-        selectedDate,
+        _selectedDate,
     ) { schedules, date ->
-        val epochDay = date.toEpochDay()
-        schedules.filter { it.schedule.startEpochDay <= epochDay && it.schedule.endEpochDay >= epochDay }
+        date?.let {
+            val epochDay = it.toEpochDay()
+            schedules.filter { schedule ->
+                schedule.schedule.startEpochDay <= epochDay && schedule.schedule.endEpochDay >= epochDay
+            }
+        }.orEmpty()
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun selectDate(date: LocalDate) {
-        selectedDate.value = date
-        if (YearMonth.from(date) != displayedMonth.value) displayedMonth.value = YearMonth.from(date)
+        selectedDatesByMonth[YearMonth.from(date)] = date
+        _selectedDate.value = date
+        _displayedMonth.value = YearMonth.from(date)
     }
 
     fun changeMonth(delta: Long) {
-        val next = displayedMonth.value.plusMonths(delta)
+        val next = _displayedMonth.value.plusMonths(delta)
         setMonth(next)
     }
 
     fun setMonth(value: YearMonth) {
-        displayedMonth.value = value
-        selectedDate.value = value.atDay(selectedDate.value.dayOfMonth.coerceAtMost(value.lengthOfMonth()))
+        if (value == _displayedMonth.value) return
+        _displayedMonth.value = value
+        _selectedDate.value = selectedDatesByMonth[value]
     }
 
     fun insert(schedule: ScheduleEntity, steps: List<ScheduleStepEntity> = emptyList(), onSaved: () -> Unit) {

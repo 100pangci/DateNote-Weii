@@ -23,6 +23,7 @@
     <string name="settings">设置</string>
     <string name="previous_month">上个月</string>
     <string name="next_month">下个月</string>
+    <string name="go_to_today">回到今天</string>
     <string name="calendar_date_description">%1$d年%2$d月%3$d日</string>
     <string name="monday">一</string>
     <string name="tuesday">二</string>
@@ -34,7 +35,8 @@
     <string name="month_title">%1$d年%2$d月</string>
     <string name="date_month_day">%1$d月%2$d日的安排</string>
     <string name="date_year_month_day">%1$d年%2$d月%3$d日</string>
-    <string name="today_schedules">今天的安排</string>
+    <string name="today_schedules">当天的安排</string>
+    <string name="select_day_to_view_schedules">选择一天查看安排</string>
     <string name="month_empty_title">这个月还没有安排</string>
     <string name="month_empty_message">想到什么，就记下来吧</string>
     <string name="today_empty">今天没有安排，可以轻松一点啦</string>

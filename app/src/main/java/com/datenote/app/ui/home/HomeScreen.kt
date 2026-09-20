@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBackIosNew
+import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -75,8 +76,8 @@ fun HomeScreen(
     onEdit: (Long) -> Unit,
 ) {
     val viewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory(repository, reminderScheduler, defaultReminderTimeMinutes))
-    val month by viewModel.month.collectAsStateWithLifecycle()
-    val selectedDate by viewModel.selectedDay.collectAsStateWithLifecycle()
+    val month by viewModel.displayedMonth.collectAsStateWithLifecycle()
+    val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
     val monthSchedules by viewModel.monthSchedules.collectAsStateWithLifecycle()
     val allSchedules by viewModel.allSchedulesWithSteps.collectAsStateWithLifecycle()
     val selectedSchedules by viewModel.selectedSchedules.collectAsStateWithLifecycle()
@@ -107,17 +108,23 @@ fun HomeScreen(
             }
             item {
                 Text(
-                    text = if (selectedDate == LocalDate.now()) {
-                        stringResource(R.string.today_schedules)
-                    } else {
-                        stringResource(R.string.date_month_day, selectedDate.monthValue, selectedDate.dayOfMonth)
-                    },
+                    text = selectedDate?.let { date ->
+                        if (date == LocalDate.now()) {
+                            stringResource(R.string.today_schedules)
+                        } else {
+                            stringResource(
+                                R.string.date_month_day,
+                                date.monthValue,
+                                date.dayOfMonth,
+                            )
+                        }
+                    } ?: stringResource(R.string.select_day_to_view_schedules),
                     style = MaterialTheme.typography.titleLarge,
                 )
             }
-            if (selectedSchedules.isEmpty()) {
+            if (selectedDate != null && selectedSchedules.isEmpty()) {
                 item { EmptyDayState(isToday = selectedDate == LocalDate.now(), monthIsEmpty = monthSchedules.isEmpty()) }
-            } else {
+            } else if (selectedDate != null) {
                 items(selectedSchedules, key = { it.schedule.id }) { schedule ->
                     ExpandableScheduleCard(
                         schedule = schedule,
@@ -205,8 +212,11 @@ private fun GreetingBlock(nickname: String) {
 
 @Composable
 private fun WelcomeCard(nickname: String) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-        Column(Modifier.padding(16.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text(stringResource(R.string.welcome_back, nickname), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.welcome_back_message), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -219,17 +229,20 @@ private const val CalendarPageCount = 20_001
 @Composable
 private fun CalendarCard(
     month: YearMonth,
-    selectedDate: LocalDate,
+    selectedDate: LocalDate?,
     allSchedules: List<ScheduleWithSteps>,
     onMonthSettled: (YearMonth) -> Unit,
     onSelectDate: (LocalDate) -> Unit,
 ) {
+    val pagerBaseMonth = remember { YearMonth.now() }
+    val initialPage = remember(pagerBaseMonth, month) {
+        CalendarAnchorPage + (month.toEpochMonth() - pagerBaseMonth.toEpochMonth()).toInt()
+    }
     val pagerState = rememberPagerState(
-        initialPage = CalendarAnchorPage,
+        initialPage = initialPage,
         pageCount = { CalendarPageCount },
     )
     val scope = rememberCoroutineScope()
-    val pagerBaseMonth = remember { YearMonth.now() }
     val visibleMonth by remember(pagerBaseMonth, pagerState) {
         derivedStateOf {
             pagerBaseMonth.plusMonths((pagerState.currentPage - CalendarAnchorPage).toLong())
@@ -259,6 +272,11 @@ private fun CalendarCard(
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f),
                 )
+                IconButton(
+                    onClick = { onSelectDate(LocalDate.now()) },
+                ) {
+                    Icon(Icons.Default.Today, stringResource(R.string.go_to_today), Modifier.size(18.dp))
+                }
                 IconButton(
                     onClick = {
                         scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
@@ -294,10 +312,9 @@ private fun CalendarCard(
             ) { page ->
                 val pageMonth = pagerBaseMonth.plusMonths((page - CalendarAnchorPage).toLong())
                 val pageSchedules = schedulesForMonth(allSchedules, pageMonth)
-                val pageSelectedDate = selectedDateForMonth(selectedDate, pageMonth)
                 CalendarMonthPage(
                     month = pageMonth,
-                    selectedDate = pageSelectedDate,
+                    selectedDate = selectedDate,
                     schedules = pageSchedules,
                     onSelectDate = onSelectDate,
                 )
@@ -309,7 +326,7 @@ private fun CalendarCard(
 @Composable
 private fun CalendarMonthPage(
     month: YearMonth,
-    selectedDate: LocalDate,
+    selectedDate: LocalDate?,
     schedules: List<ScheduleWithSteps>,
     onSelectDate: (LocalDate) -> Unit,
 ) {
@@ -328,7 +345,7 @@ private fun CalendarMonthPage(
                         modifier = Modifier.weight(1f),
                         date = date,
                         inMonth = date.month == month.month,
-                        isSelected = date == selectedDate,
+                        isSelected = selectedDate != null && date == selectedDate,
                         isToday = date == today,
                         count = count,
                         schedules = schedules.filter { it.schedule.startEpochDay <= date.toEpochDay() && it.schedule.endEpochDay >= date.toEpochDay() },
@@ -407,8 +424,5 @@ private fun schedulesForMonth(schedules: List<ScheduleWithSteps>, month: YearMon
     val end = month.atEndOfMonth().toEpochDay()
     return schedules.filter { it.schedule.startEpochDay <= end && it.schedule.endEpochDay >= start }
 }
-
-private fun selectedDateForMonth(selectedDate: LocalDate, month: YearMonth): LocalDate =
-    month.atDay(selectedDate.dayOfMonth.coerceAtMost(month.lengthOfMonth()))
 
 private fun YearMonth.toEpochMonth(): Long = year.toLong() * 12L + monthValue - 1L
