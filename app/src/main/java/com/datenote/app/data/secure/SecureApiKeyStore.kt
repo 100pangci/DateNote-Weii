@@ -2,6 +2,7 @@ package com.datenote.app.data.secure
 
 import android.content.Context
 import android.util.Base64
+import androidx.core.content.edit
 import java.nio.charset.StandardCharsets
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -15,15 +16,18 @@ class SecureApiKeyStore(context: Context) {
 
     fun save(value: String) {
         if (value.isBlank()) {
-            preferences.edit().remove("ciphertext").remove("iv").apply()
+            preferences.edit {
+                remove("ciphertext")
+                remove("iv")
+            }
             return
         }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
-        preferences.edit()
-            .putString("ciphertext", Base64.encodeToString(cipher.doFinal(value.toByteArray(StandardCharsets.UTF_8)), Base64.NO_WRAP))
-            .putString("iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
-            .apply()
+        preferences.edit {
+            putString("ciphertext", Base64.encodeToString(cipher.doFinal(value.toByteArray(StandardCharsets.UTF_8)), Base64.NO_WRAP))
+            putString("iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+        }
     }
 
     fun read(): String {

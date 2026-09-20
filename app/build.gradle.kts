@@ -1,6 +1,51 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.io.FileInputStream
+import java.util.Locale
 import java.util.Properties
+
+val weiiBuildEnabled = providers.gradleProperty("weii").isPresent
+
+fun loadDotEnv(file: File): Map<String, String> {
+    if (!file.isFile) return emptyMap()
+    return file.readLines()
+        .asSequence()
+        .map(String::trim)
+        .filter { it.isNotEmpty() && !it.startsWith("#") && '=' in it }
+        .map { line ->
+            val separator = line.indexOf('=')
+            val rawKey = line.substring(0, separator).trim()
+            val key = rawKey.substringBefore(':')
+                .trim()
+                .uppercase(Locale.ROOT)
+                .replace(Regex("[^A-Z0-9]+"), "_")
+                .trim('_')
+            var value = line.substring(separator + 1).trim()
+            if (value.length >= 2 && value.first() == value.last() && value.first() in setOf('\'', '"')) {
+                value = value.substring(1, value.length - 1)
+            }
+            key to value
+        }
+        .toMap()
+}
+
+fun Map<String, String>.firstValue(vararg keys: String): String = keys
+    .asSequence()
+    .map { this[it] }
+    .firstOrNull { !it.isNullOrBlank() }
+    .orEmpty()
+
+val weiiEnv = if (weiiBuildEnabled) loadDotEnv(rootProject.file(".env")) else emptyMap()
+val weiiBaseUrl = weiiEnv.firstValue("WEII_AI_BASE_URL")
+val weiiApiKey = weiiEnv.firstValue("WEII_AI_API_KEY")
+val weiiModel = weiiEnv.firstValue("WEII_AI_MODEL")
+
+if (weiiBuildEnabled) {
+    require(weiiBaseUrl.isNotBlank()) { "-Pweii requires WEII_AI_BASE_URL in the root .env file" }
+    require(weiiApiKey.isNotBlank()) { "-Pweii requires WEII_AI_API_KEY in the root .env file" }
+    require(weiiModel.isNotBlank()) { "-Pweii requires WEII_AI_MODEL in the root .env file" }
+}
+
+fun buildConfigString(value: String): String = "\"${value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\""
 
 val localSigningPropertiesFile = file(System.getProperty("user.home") + "/.android/date-note-signing.properties")
 val localSigningProperties = Properties().apply {
@@ -27,6 +72,11 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+
+        buildConfigField("boolean", "WEII_PRECONFIGURED", weiiBuildEnabled.toString())
+        buildConfigField("String", "WEII_AI_BASE_URL", buildConfigString(weiiBaseUrl))
+        buildConfigField("String", "WEII_AI_API_KEY", buildConfigString(weiiApiKey))
+        buildConfigField("String", "WEII_AI_MODEL", buildConfigString(weiiModel))
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

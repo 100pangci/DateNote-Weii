@@ -16,6 +16,9 @@ captures/
 .cxx/
 
 # Secrets and release artifacts.
+.env
+.env.*
+!.env.example
 *.jks
 *.keystore
 *.p12

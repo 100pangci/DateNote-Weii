@@ -3,12 +3,12 @@ package com.datenote.app.reminder
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import android.Manifest
 
 data class NotificationStatus(
@@ -33,21 +33,18 @@ object NotificationAccess {
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
             android.content.pm.PackageManager.PERMISSION_GRANTED
         val appNotificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
-        val channelEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.getSystemService(android.app.NotificationManager::class.java)
-                ?.getNotificationChannel(ReminderNotifications.CHANNEL_ID)
-                ?.let { it.importance != android.app.NotificationManager.IMPORTANCE_NONE }
-                ?: false
-        } else {
-            true
-        }
+        val channelEnabled = context.getSystemService(android.app.NotificationManager::class.java)
+            ?.getNotificationChannel(ReminderNotifications.CHANNEL_ID)
+            ?.let { it.importance != android.app.NotificationManager.IMPORTANCE_NONE }
+            ?: false
         return NotificationStatus(permissionGranted, appNotificationsEnabled, channelEnabled)
     }
 
     fun reliability(context: Context): ReminderReliability {
         val powerManager = context.getSystemService(PowerManager::class.java)
-        val batteryOptimizationIgnored = Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
-            runCatching { powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true }.getOrDefault(false)
+        val batteryOptimizationIgnored = runCatching {
+            powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
+        }.getOrDefault(false)
         return ReminderReliability(status(context), batteryOptimizationIgnored)
     }
 }
@@ -55,12 +52,8 @@ object NotificationAccess {
 /** All system-setting navigation is kept here so Compose screens do not know vendor component names. */
 object ReminderSettings {
     fun openNotificationSettings(context: Context): Boolean {
-        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-        } else {
-            appDetailsIntent(context)
-        }
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
         return startSafely(context, intent) || openAppDetails(context)
     }
 
@@ -93,7 +86,7 @@ object ReminderSettings {
 
     private fun appDetailsIntent(context: Context): Intent = Intent(
         Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-        Uri.parse("package:${context.packageName}"),
+        "package:${context.packageName}".toUri(),
     )
 
     private fun startSafely(context: Context, intent: Intent): Boolean {

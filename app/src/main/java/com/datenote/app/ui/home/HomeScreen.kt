@@ -13,60 +13,56 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBackIosNew
-import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.datenote.app.R
-import com.datenote.app.data.local.ScheduleEntity
 import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
-import com.datenote.app.reminder.ReminderScheduler
 import com.datenote.app.domain.model.ScheduleStatus
 import com.datenote.app.domain.model.isOverdue
 import com.datenote.app.domain.model.monthGrid
 import com.datenote.app.domain.model.progress
-import com.datenote.app.domain.model.inclusiveDays
-import java.time.DayOfWeek
+import com.datenote.app.reminder.ReminderScheduler
+import com.datenote.app.ui.components.ExpandableScheduleCard
 import java.time.LocalDate
 import java.time.YearMonth
+import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
@@ -82,6 +78,7 @@ fun HomeScreen(
     val month by viewModel.month.collectAsStateWithLifecycle()
     val selectedDate by viewModel.selectedDay.collectAsStateWithLifecycle()
     val monthSchedules by viewModel.monthSchedules.collectAsStateWithLifecycle()
+    val allSchedules by viewModel.allSchedulesWithSteps.collectAsStateWithLifecycle()
     val selectedSchedules by viewModel.selectedSchedules.collectAsStateWithLifecycle()
     var pendingDelete by remember { mutableStateOf<ScheduleWithSteps?>(null) }
     var pendingComplete by remember { mutableStateOf<ScheduleWithSteps?>(null) }
@@ -103,9 +100,8 @@ fun HomeScreen(
                 CalendarCard(
                     month = month,
                     selectedDate = selectedDate,
-                    schedules = monthSchedules,
-                    onPrevious = { viewModel.changeMonth(-1) },
-                    onNext = { viewModel.changeMonth(1) },
+                    allSchedules = allSchedules,
+                    onMonthSettled = viewModel::setMonth,
                     onSelectDate = viewModel::selectDate,
                 )
             }
@@ -123,15 +119,20 @@ fun HomeScreen(
                 item { EmptyDayState(isToday = selectedDate == LocalDate.now(), monthIsEmpty = monthSchedules.isEmpty()) }
             } else {
                 items(selectedSchedules, key = { it.schedule.id }) { schedule ->
-                    ScheduleCard(
+                    ExpandableScheduleCard(
                         schedule = schedule,
-                        onClick = { onEdit(schedule.schedule.id) },
-                        onToggleComplete = {
-                            if (schedule.schedule.status == ScheduleStatus.COMPLETED) viewModel.toggleCompleted(schedule)
-                            else if (schedule.progress.hasSteps && schedule.progress.completedCount < schedule.progress.totalCount) pendingComplete = schedule
-                            else viewModel.markCompleted(schedule, completeSteps = false)
+                        onEdit = { onEdit(schedule.schedule.id) },
+                        onToggleCompleted = {
+                            if (schedule.schedule.status == ScheduleStatus.COMPLETED) {
+                                viewModel.toggleCompleted(schedule)
+                            } else if (schedule.progress.hasSteps && schedule.progress.completedCount < schedule.progress.totalCount) {
+                                pendingComplete = schedule
+                            } else {
+                                viewModel.markCompleted(schedule, completeSteps = false)
+                            }
                         },
-                        onPostpone = { viewModel.postpone(schedule, it) },
+                        onToggleStep = { step -> viewModel.toggleStep(schedule, step) },
+                        onPostpone = { days -> viewModel.postpone(schedule, days) },
                         onDelete = { pendingDelete = schedule },
                     )
                 }
@@ -141,7 +142,9 @@ fun HomeScreen(
             onClick = onAdd,
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
             containerColor = MaterialTheme.colorScheme.primaryContainer,
-        ) { Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_schedule)) }
+        ) {
+            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_schedule))
+        }
     }
 
     pendingDelete?.let { schedule ->
@@ -156,7 +159,9 @@ fun HomeScreen(
                 TextButton(onClick = {
                     viewModel.delete(schedule)
                     pendingDelete = null
-                }) { Text(stringResource(R.string.confirm_delete), color = MaterialTheme.colorScheme.error) }
+                }) {
+                    Text(stringResource(R.string.confirm_delete), color = MaterialTheme.colorScheme.error)
+                }
             },
         )
     }
@@ -165,8 +170,15 @@ fun HomeScreen(
             onDismissRequest = { pendingComplete = null },
             title = { Text(stringResource(R.string.incomplete_steps_title)) },
             text = { Text(stringResource(R.string.incomplete_steps_message)) },
-            dismissButton = { TextButton(onClick = { pendingComplete = null }) { Text(stringResource(R.string.check_again)) } },
-            confirmButton = { TextButton(onClick = { viewModel.markCompleted(schedule, true); pendingComplete = null }) { Text(stringResource(R.string.complete_all)) } },
+            dismissButton = {
+                TextButton(onClick = { pendingComplete = null }) { Text(stringResource(R.string.check_again)) }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.markCompleted(schedule, true)
+                    pendingComplete = null
+                }) { Text(stringResource(R.string.complete_all)) }
+            },
         )
     }
 }
@@ -201,53 +213,127 @@ private fun WelcomeCard(nickname: String) {
     }
 }
 
+private const val CalendarAnchorPage = 10_000
+private const val CalendarPageCount = 20_001
+
 @Composable
 private fun CalendarCard(
     month: YearMonth,
     selectedDate: LocalDate,
-    schedules: List<ScheduleWithSteps>,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
+    allSchedules: List<ScheduleWithSteps>,
+    onMonthSettled: (YearMonth) -> Unit,
     onSelectDate: (LocalDate) -> Unit,
 ) {
-    val counts = remember(schedules) {
-        monthGrid(month).map { it.toEpochDay() }.associateWith { epochDay ->
-            schedules.count { it.schedule.startEpochDay <= epochDay && it.schedule.endEpochDay >= epochDay }
+    val pagerState = rememberPagerState(
+        initialPage = CalendarAnchorPage,
+        pageCount = { CalendarPageCount },
+    )
+    val scope = rememberCoroutineScope()
+    val pagerBaseMonth = remember { YearMonth.now() }
+    val visibleMonth by remember(pagerBaseMonth, pagerState) {
+        derivedStateOf {
+            pagerBaseMonth.plusMonths((pagerState.currentPage - CalendarAnchorPage).toLong())
         }
     }
-    val today = LocalDate.now()
     val weekdayLabels = listOf(
         R.string.monday, R.string.tuesday, R.string.wednesday, R.string.thursday,
         R.string.friday, R.string.saturday, R.string.sunday,
     )
+
+    LaunchedEffect(month) {
+        val targetPage = CalendarAnchorPage + (month.toEpochMonth() - pagerBaseMonth.toEpochMonth()).toInt()
+        if (targetPage != pagerState.currentPage) pagerState.animateScrollToPage(targetPage)
+    }
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage }.collect { settledPage ->
+            val targetMonth = pagerBaseMonth.plusMonths((settledPage - CalendarAnchorPage).toLong())
+            onMonthSettled(targetMonth)
+        }
+    }
+
     Card(shape = RoundedCornerShape(24.dp)) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.month_title, month.year, month.monthValue), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                IconButton(onClick = onPrevious) { Icon(Icons.Default.ArrowBackIosNew, stringResource(R.string.previous_month), Modifier.size(18.dp)) }
-                IconButton(onClick = onNext) { Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, stringResource(R.string.next_month), Modifier.size(18.dp)) }
+                Text(
+                    text = stringResource(R.string.month_title, visibleMonth.year, visibleMonth.monthValue),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(
+                    onClick = {
+                        scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
+                    },
+                ) {
+                    Icon(Icons.Default.ArrowBackIosNew, stringResource(R.string.previous_month), Modifier.size(18.dp))
+                }
+                IconButton(
+                    onClick = {
+                        scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                    },
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, stringResource(R.string.next_month), Modifier.size(18.dp))
+                }
             }
             Row(Modifier.fillMaxWidth()) {
                 weekdayLabels.forEach { label ->
-                    Text(stringResource(label), modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        stringResource(label),
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
             Spacer(Modifier.height(4.dp))
-            monthGrid(month).chunked(7).forEach { week ->
-                Row(Modifier.fillMaxWidth()) {
-                    week.forEach { date ->
-                        val count = counts[date.toEpochDay()] ?: 0
-                        CalendarDay(
-                            modifier = Modifier.weight(1f),
-                            date = date,
-                            inMonth = date.month == month.month,
-                            isSelected = date == selectedDate,
-                            isToday = date == today,
-                            count = count,
-                            schedules = schedules.filter { it.schedule.startEpochDay <= date.toEpochDay() && it.schedule.endEpochDay >= date.toEpochDay() },
-                            onClick = { onSelectDate(date) },
-                        )
-                    }
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(312.dp),
+                key = { it },
+            ) { page ->
+                val pageMonth = pagerBaseMonth.plusMonths((page - CalendarAnchorPage).toLong())
+                val pageSchedules = schedulesForMonth(allSchedules, pageMonth)
+                val pageSelectedDate = selectedDateForMonth(selectedDate, pageMonth)
+                CalendarMonthPage(
+                    month = pageMonth,
+                    selectedDate = pageSelectedDate,
+                    schedules = pageSchedules,
+                    onSelectDate = onSelectDate,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarMonthPage(
+    month: YearMonth,
+    selectedDate: LocalDate,
+    schedules: List<ScheduleWithSteps>,
+    onSelectDate: (LocalDate) -> Unit,
+) {
+    val counts = remember(schedules, month) {
+        monthGrid(month).associateWith { date ->
+            schedules.count { it.schedule.startEpochDay <= date.toEpochDay() && it.schedule.endEpochDay >= date.toEpochDay() }
+        }
+    }
+    val today = LocalDate.now()
+    Column(Modifier.fillMaxWidth()) {
+        monthGrid(month).chunked(7).forEach { week ->
+            Row(Modifier.fillMaxWidth()) {
+                week.forEach { date ->
+                    val count = counts[date] ?: 0
+                    CalendarDay(
+                        modifier = Modifier.weight(1f),
+                        date = date,
+                        inMonth = date.month == month.month,
+                        isSelected = date == selectedDate,
+                        isToday = date == today,
+                        count = count,
+                        schedules = schedules.filter { it.schedule.startEpochDay <= date.toEpochDay() && it.schedule.endEpochDay >= date.toEpochDay() },
+                        onClick = { onSelectDate(date) },
+                    )
                 }
             }
         }
@@ -266,14 +352,22 @@ private fun CalendarDay(
     onClick: () -> Unit,
 ) {
     val hasOverdue = schedules.any { isOverdue(it.schedule, LocalDate.now()) }
-    val hasCompleted = schedules.all { it.schedule.status == ScheduleStatus.COMPLETED }
+    val hasCompleted = schedules.isNotEmpty() && schedules.all { it.schedule.status == ScheduleStatus.COMPLETED }
     val dotColor = when {
         hasOverdue -> MaterialTheme.colorScheme.error
-        hasCompleted && count > 0 -> Color(0xFF5B8C5A)
+        hasCompleted && count > 0 -> MaterialTheme.colorScheme.tertiary
         else -> MaterialTheme.colorScheme.primary
     }
+    val dateDescription = stringResource(R.string.calendar_date_description, date.year, date.monthValue, date.dayOfMonth)
     Box(
-        modifier = modifier.height(52.dp).padding(2.dp).clip(CircleShape).clickable(onClick = onClick),
+        modifier = modifier
+            .height(52.dp)
+            .padding(2.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick)
+            .semantics {
+                contentDescription = dateDescription
+            },
         contentAlignment = Alignment.Center,
     ) {
         if (isSelected) Box(Modifier.size(38.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape))
@@ -308,79 +402,13 @@ private fun EmptyDayState(isToday: Boolean, monthIsEmpty: Boolean) {
     }
 }
 
-@Composable
-private fun ScheduleCard(
-    schedule: ScheduleWithSteps,
-    onClick: () -> Unit,
-    onToggleComplete: () -> Unit,
-    onPostpone: (Long) -> Unit,
-    onDelete: () -> Unit,
-) {
-    var menuExpanded by remember { mutableStateOf(false) }
-    val today = LocalDate.now()
-    val entity = schedule.schedule
-    val overdue = isOverdue(entity, today)
-    val completed = entity.status == ScheduleStatus.COMPLETED
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = if (completed) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-            else MaterialTheme.colorScheme.surfaceContainer,
-        ),
-    ) {
-        Row(Modifier.fillMaxWidth().padding(start = 8.dp, top = 12.dp, bottom = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = completed, onCheckedChange = { onToggleComplete() })
-            Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
-                Text(entity.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(dateSummary(entity), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                val detail = buildString {
-                    entity.minuteOfDay?.let { append(String.format("%02d:%02d", it / 60, it % 60)) }
-                    if (entity.minuteOfDay != null && entity.category != null) append(" · ")
-                    entity.category?.let(::append)
-                }
-                if (detail.isNotBlank()) Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (entity.note.isNotBlank()) Text(entity.note, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(scheduleProgressText(schedule), color = if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
-                if (schedule.progress.hasSteps) {
-                    Text(stringResource(R.string.progress_completed, schedule.progress.completedCount, schedule.progress.totalCount), style = MaterialTheme.typography.labelMedium)
-                    LinearProgressIndicator(progress = { schedule.progress.fraction }, modifier = Modifier.fillMaxWidth())
-                    schedule.orderedSteps.firstOrNull { !it.isCompleted }?.let { next ->
-                        Text(stringResource(R.string.next_step, next.title), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-                if (entity.remindBeforeMinutes != null) Text(stringResource(R.string.reminder_enabled), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
-            }
-            Box {
-                IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Default.MoreVert, stringResource(R.string.schedule_more)) }
-                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                    DropdownMenuItem(
-                        text = { Text(if (completed) stringResource(R.string.mark_todo) else stringResource(R.string.mark_completed)) },
-                        onClick = { menuExpanded = false; onToggleComplete() },
-                    )
-                    DropdownMenuItem(text = { Text(stringResource(R.string.postpone_one_day)) }, onClick = { menuExpanded = false; onPostpone(1) })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.postpone_one_week)) }, onClick = { menuExpanded = false; onPostpone(7) })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.delete_schedule)) }, onClick = { menuExpanded = false; onDelete() }, leadingIcon = { Icon(Icons.Default.DeleteOutline, null) })
-                }
-            }
-        }
-    }
+private fun schedulesForMonth(schedules: List<ScheduleWithSteps>, month: YearMonth): List<ScheduleWithSteps> {
+    val start = month.atDay(1).toEpochDay()
+    val end = month.atEndOfMonth().toEpochDay()
+    return schedules.filter { it.schedule.startEpochDay <= end && it.schedule.endEpochDay >= start }
 }
 
-private fun dateSummary(schedule: ScheduleEntity): String {
-    val start = LocalDate.ofEpochDay(schedule.startEpochDay)
-    val end = LocalDate.ofEpochDay(schedule.endEpochDay)
-    return if (start == end) "${start.monthValue}月${start.dayOfMonth}日"
-    else "${start.monthValue}月${start.dayOfMonth}日～${end.monthValue}月${end.dayOfMonth}日 · 共 ${inclusiveDays(schedule.startEpochDay, schedule.endEpochDay)} 天"
-}
+private fun selectedDateForMonth(selectedDate: LocalDate, month: YearMonth): LocalDate =
+    month.atDay(selectedDate.dayOfMonth.coerceAtMost(month.lengthOfMonth()))
 
-@Composable
-private fun scheduleProgressText(schedule: ScheduleWithSteps): String {
-    if (schedule.schedule.status == ScheduleStatus.COMPLETED) return stringResource(R.string.schedule_done)
-    val today = LocalDate.now().toEpochDay()
-    return when {
-        today < schedule.schedule.startEpochDay -> stringResource(R.string.days_to_start, schedule.schedule.startEpochDay - today)
-        today == schedule.schedule.endEpochDay -> stringResource(R.string.today_due)
-        today > schedule.schedule.endEpochDay -> stringResource(R.string.days_overdue, today - schedule.schedule.endEpochDay)
-        else -> stringResource(R.string.in_progress_remaining, schedule.schedule.endEpochDay - today)
-    }
-}
+private fun YearMonth.toEpochMonth(): Long = year.toLong() * 12L + monthValue - 1L

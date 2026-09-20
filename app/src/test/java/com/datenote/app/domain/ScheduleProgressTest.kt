@@ -25,11 +25,12 @@ class ScheduleProgressTest {
         assertEquals(0f, progress.fraction)
     }
 
-    @Test fun stepStatusMovesThroughTodoInProgressAndCompleted() {
+    @Test fun stepStatusNeedsExplicitParentCompletion() {
         val first = ScheduleStepEntity(scheduleId = 1, title = "第一步", position = 0, isCompleted = true)
         val second = first.copy(id = 2, title = "第二步", position = 1, isCompleted = false)
         assertEquals(ScheduleStatus.IN_PROGRESS, statusAfterStepChange(ScheduleStatus.TODO, listOf(first, second)))
-        assertEquals(ScheduleStatus.COMPLETED, statusAfterStepChange(ScheduleStatus.IN_PROGRESS, listOf(first, second.copy(isCompleted = true))))
+        assertEquals(ScheduleStatus.IN_PROGRESS, statusAfterStepChange(ScheduleStatus.IN_PROGRESS, listOf(first, second.copy(isCompleted = true))))
         assertEquals(ScheduleStatus.IN_PROGRESS, statusAfterStepChange(ScheduleStatus.COMPLETED, listOf(first.copy(isCompleted = false), second.copy(isCompleted = true))))
+        assertEquals(ScheduleStatus.COMPLETED, statusAfterStepChange(ScheduleStatus.COMPLETED, listOf(first, second.copy(isCompleted = true))))
     }
 }

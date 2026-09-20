@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.datenote.app.data.local.ScheduleEntity
+import com.datenote.app.data.local.ScheduleStepEntity
 import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
 import com.datenote.app.domain.model.ScheduleStatus
@@ -68,6 +69,26 @@ class AllSchedulesViewModel(
             repository.setStatus(schedule.schedule.id, ScheduleStatus.COMPLETED, completeSteps)?.let {
                 reminderScheduler.sync(it, defaultReminderTimeMinutes)
             }
+        }
+    }
+
+    fun toggleStep(schedule: ScheduleWithSteps, step: ScheduleStepEntity) {
+        viewModelScope.launch {
+            repository.setStepCompleted(schedule.schedule.id, step.id, !step.isCompleted)?.let {
+                reminderScheduler.sync(it, defaultReminderTimeMinutes)
+            }
+        }
+    }
+
+    fun postpone(schedule: ScheduleWithSteps, days: Long) {
+        viewModelScope.launch {
+            val updated = schedule.schedule.copy(
+                startEpochDay = schedule.schedule.startEpochDay + days,
+                endEpochDay = schedule.schedule.endEpochDay + days,
+                updatedAt = System.currentTimeMillis(),
+            )
+            repository.update(updated)
+            reminderScheduler.sync(updated, defaultReminderTimeMinutes)
         }
     }
 

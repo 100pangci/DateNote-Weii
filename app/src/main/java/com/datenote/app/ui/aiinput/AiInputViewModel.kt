@@ -69,6 +69,12 @@ class AiInputViewModel(
         _state.value = _state.value.copy(result = null, error = null)
     }
 
+    /** Reset the draft and the source text only after schedules were saved successfully. */
+    fun clearAfterSaved() {
+        parseJob?.cancel()
+        _state.value = AiInputState()
+    }
+
     fun saveSchedules(schedules: List<ScheduleWithSteps>, onFinished: (Boolean) -> Unit) {
         if (schedules.isEmpty()) return onFinished(false)
         viewModelScope.launch {

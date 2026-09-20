@@ -24,12 +24,10 @@ object ReminderNotifications {
     const val WORK_TAG = "schedule-reminders"
 
     fun createChannel(context: Context) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val manager = context.getSystemService(android.app.NotificationManager::class.java)
-            manager.createNotificationChannel(android.app.NotificationChannel(CHANNEL_ID, context.getString(R.string.notification_channel_name), android.app.NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = context.getString(R.string.notification_channel_description)
-            })
-        }
+        val manager = context.getSystemService(android.app.NotificationManager::class.java)
+        manager.createNotificationChannel(android.app.NotificationChannel(CHANNEL_ID, context.getString(R.string.notification_channel_name), android.app.NotificationManager.IMPORTANCE_DEFAULT).apply {
+            description = context.getString(R.string.notification_channel_description)
+        })
     }
 }
 
@@ -110,7 +108,7 @@ class ScheduleReminderWorker(
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
         )
         val notification = android.app.Notification.Builder(applicationContext, ReminderNotifications.CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_notification)
             .setContentTitle(schedule.title)
             .setContentText(body)
             .setContentIntent(pendingIntent)

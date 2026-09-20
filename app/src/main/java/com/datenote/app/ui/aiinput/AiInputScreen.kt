@@ -9,15 +9,27 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +61,8 @@ import com.datenote.app.domain.parser.ParsedSchedule
 import com.datenote.app.domain.parser.ParsedStep
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.Instant
+import java.time.ZoneOffset
 
 private data class EditableAiDraft(
     val id: Long,
@@ -106,10 +121,9 @@ fun AiInputScreen(
                         saving = false
                         if (success) {
                             saveError = false
+                            viewModel.clearAfterSaved()
                             if (schedules.any { it.schedule.remindBeforeMinutes != null } && !NotificationAccess.status(context).canPost) {
                                 notificationUnavailable = true
-                            } else {
-                                viewModel.startOver()
                             }
                         } else saveError = true
                     }
@@ -160,9 +174,15 @@ private fun InputPage(state: AiInputState, onInput: (String) -> Unit, onSubmit: 
         item {
             Button(onClick = onSubmit, enabled = state.input.isNotBlank() && !state.isProcessing, modifier = Modifier.fillMaxWidth()) {
                 if (state.isProcessing) {
-                    CircularProgressIndicator(modifier = Modifier.height(20.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.height(4.dp))
-                    Text(stringResource(R.string.ai_processing))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.ai_processing))
+                    }
                 } else Text(stringResource(R.string.ai_organize))
             }
         }
@@ -214,22 +234,43 @@ private fun ReviewPage(
         if (saveError) item { Text(stringResource(R.string.ai_invalid_draft), color = MaterialTheme.colorScheme.error) }
         item {
             Button(onClick = onConfirm, enabled = !saving && drafts.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
-                if (saving) CircularProgressIndicator(modifier = Modifier.height(20.dp), strokeWidth = 2.dp)
-                else Text(stringResource(R.string.ai_confirm_save))
+                if (saving) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.ai_processing))
+                    }
+                } else Text(stringResource(R.string.ai_confirm_save))
             }
             TextButton(onClick = onStartOver, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.ai_start_over)) }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DraftCard(draft: EditableAiDraft, onChange: (EditableAiDraft) -> Unit, onRemove: () -> Unit) {
+    var datePickerTarget by rememberSaveable(draft.id) { mutableStateOf<AiDateTarget?>(null) }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(draft.title, { onChange(draft.copy(title = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.schedule_title_label)) })
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(draft.startDate, { onChange(draft.copy(startDate = it)) }, Modifier.weight(1f), label = { Text(stringResource(R.string.schedule_start_label)) }, singleLine = true)
-                OutlinedTextField(draft.endDate, { onChange(draft.copy(endDate = it)) }, Modifier.weight(1f), label = { Text(stringResource(R.string.schedule_end_label)) }, singleLine = true)
+                AiDateButton(
+                    label = stringResource(R.string.schedule_start_label),
+                    date = draft.startDate.toLocalDateOrNull() ?: LocalDate.now(),
+                    modifier = Modifier.weight(1f),
+                    onClick = { datePickerTarget = AiDateTarget.START },
+                )
+                AiDateButton(
+                    label = stringResource(R.string.schedule_end_label),
+                    date = draft.endDate.toLocalDateOrNull() ?: draft.startDate.toLocalDateOrNull() ?: LocalDate.now(),
+                    modifier = Modifier.weight(1f),
+                    onClick = { datePickerTarget = AiDateTarget.END },
+                )
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(draft.time, { onChange(draft.copy(time = it)) }, Modifier.weight(1f), label = { Text(stringResource(R.string.ai_time)) }, singleLine = true)
@@ -247,12 +288,12 @@ private fun DraftCard(draft: EditableAiDraft, onChange: (EditableAiDraft) -> Uni
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(step.isCompleted, { checked -> onChange(draft.copy(steps = draft.steps.mapIndexed { index, old -> if (index == stepIndex) old.copy(isCompleted = checked) else old })) })
                     OutlinedTextField(step.title, { value -> onChange(draft.copy(steps = draft.steps.mapIndexed { index, old -> if (index == stepIndex) old.copy(title = value) else old })) }, Modifier.weight(1f), label = { Text(stringResource(R.string.step_name)) }, singleLine = true)
-                    TextButton(enabled = stepIndex > 0, onClick = {
-                        val reordered = draft.steps.toMutableList(); val previous = reordered[stepIndex - 1]; reordered[stepIndex - 1] = reordered[stepIndex]; reordered[stepIndex] = previous; onChange(draft.copy(steps = reordered))
-                    }) { Text("↑") }
-                    TextButton(enabled = stepIndex < draft.steps.lastIndex, onClick = {
-                        val reordered = draft.steps.toMutableList(); val next = reordered[stepIndex + 1]; reordered[stepIndex + 1] = reordered[stepIndex]; reordered[stepIndex] = next; onChange(draft.copy(steps = reordered))
-                    }) { Text("↓") }
+                     IconButton(enabled = stepIndex > 0, onClick = {
+                         val reordered = draft.steps.toMutableList(); val previous = reordered[stepIndex - 1]; reordered[stepIndex - 1] = reordered[stepIndex]; reordered[stepIndex] = previous; onChange(draft.copy(steps = reordered))
+                     }) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = stringResource(R.string.move_step_up)) }
+                     IconButton(enabled = stepIndex < draft.steps.lastIndex, onClick = {
+                         val reordered = draft.steps.toMutableList(); val next = reordered[stepIndex + 1]; reordered[stepIndex + 1] = reordered[stepIndex]; reordered[stepIndex] = next; onChange(draft.copy(steps = reordered))
+                     }) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.move_step_down)) }
                     TextButton(onClick = { onChange(draft.copy(steps = draft.steps.filterIndexed { index, _ -> index != stepIndex })) }) { Text(stringResource(R.string.delete_step)) }
                 }
             }
@@ -266,7 +307,60 @@ private fun DraftCard(draft: EditableAiDraft, onChange: (EditableAiDraft) -> Uni
             TextButton(onClick = onRemove, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.ai_remove_item)) }
         }
     }
+    datePickerTarget?.let { target ->
+        val initial = when (target) {
+            AiDateTarget.START -> draft.startDate.toLocalDateOrNull() ?: LocalDate.now()
+            AiDateTarget.END -> draft.endDate.toLocalDateOrNull() ?: draft.startDate.toLocalDateOrNull() ?: LocalDate.now()
+        }
+        val pickerState = rememberDatePickerState(initialSelectedDateMillis = initial.toEpochDay() * 86_400_000L)
+        DatePickerDialog(
+            onDismissRequest = { datePickerTarget = null },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { millis ->
+                        val selected = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
+                        when (target) {
+                            AiDateTarget.START -> {
+                                val end = draft.endDate.toLocalDateOrNull()
+                                onChange(
+                                    draft.copy(
+                                        startDate = selected.toString(),
+                                        endDate = if (end == null || end.isBefore(selected)) selected.toString() else draft.endDate,
+                                    ),
+                                )
+                            }
+                            AiDateTarget.END -> {
+                                val start = draft.startDate.toLocalDateOrNull()
+                                if (start == null || !selected.isBefore(start)) onChange(draft.copy(endDate = selected.toString()))
+                            }
+                        }
+                    }
+                    datePickerTarget = null
+                }) { Text(stringResource(R.string.confirm)) }
+            },
+            dismissButton = { TextButton(onClick = { datePickerTarget = null }) { Text(stringResource(R.string.cancel)) } },
+        ) { DatePicker(state = pickerState) }
+    }
 }
+
+@Composable
+private fun AiDateButton(
+    label: String,
+    date: LocalDate,
+    modifier: Modifier,
+    onClick: () -> Unit,
+) {
+    Column(modifier) {
+        Text(label, style = MaterialTheme.typography.labelMedium)
+        OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.date_year_month_day, date.year, date.monthValue, date.dayOfMonth))
+        }
+    }
+}
+
+private enum class AiDateTarget { START, END }
+
+private fun String.toLocalDateOrNull(): LocalDate? = runCatching { LocalDate.parse(trim()) }.getOrNull()
 
 private fun ParsedSchedule.toEditable(defaultReminder: Int, id: Long): EditableAiDraft = EditableAiDraft(
     id = id,

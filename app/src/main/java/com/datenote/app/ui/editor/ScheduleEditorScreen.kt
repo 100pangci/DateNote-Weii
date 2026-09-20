@@ -8,12 +8,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -27,12 +31,15 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -114,16 +121,21 @@ fun ScheduleEditorScreen(
         if (steps.lastOrNull()?.title.isNullOrEmpty()) focusRequester.requestFocus()
     }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text(stringResource(R.string.cancel)) }
-            Text(
-                if (schedule.id == 0L) stringResource(R.string.new_schedule_title) else stringResource(R.string.edit_schedule_title),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.weight(1f),
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(if (schedule.id == 0L) stringResource(R.string.new_schedule_title) else stringResource(R.string.edit_schedule_title))
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                    }
+                },
             )
-        }
-        Spacer(Modifier.height(12.dp))
+        },
+    ) { padding ->
+    Column(Modifier.fillMaxSize().padding(padding).imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp)) {
         OutlinedTextField(
             value = title,
             onValueChange = { title = it; titleSubmitted = false },
@@ -156,7 +168,7 @@ fun ScheduleEditorScreen(
             label = { Text(stringResource(R.string.schedule_time_label)) },
             supportingText = { Text(if (timeError) stringResource(R.string.invalid_time) else stringResource(R.string.schedule_time_supporting)) },
             isError = timeError,
-            placeholder = { Text("09:30") },
+            placeholder = { Text(stringResource(R.string.schedule_time_placeholder)) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
         )
@@ -189,20 +201,20 @@ fun ScheduleEditorScreen(
                         singleLine = true,
                         isError = stepsError && step.title.trim().isEmpty(),
                     )
-                    TextButton(enabled = index > 0, onClick = {
+                    IconButton(enabled = index > 0, onClick = {
                         val reordered = steps.toMutableList()
                         val previous = reordered[index - 1]
                         reordered[index - 1] = reordered[index]
                         reordered[index] = previous
                         steps = reordered
-                    }) { Text("↑") }
-                    TextButton(enabled = index < steps.lastIndex, onClick = {
+                    }) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = stringResource(R.string.move_step_up)) }
+                    IconButton(enabled = index < steps.lastIndex, onClick = {
                         val reordered = steps.toMutableList()
                         val next = reordered[index + 1]
                         reordered[index + 1] = reordered[index]
                         reordered[index] = next
                         steps = reordered
-                    }) { Text("↓") }
+                    }) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.move_step_down)) }
                     IconButton(onClick = { steps = steps.filterIndexed { i, _ -> i != index } }) { Icon(Icons.Default.DeleteOutline, stringResource(R.string.delete_step)) }
                 }
             }
@@ -230,12 +242,23 @@ fun ScheduleEditorScreen(
             }
         }
         Spacer(Modifier.height(12.dp))
-        Card(Modifier.fillMaxWidth()) {
-            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.schedule_reminder_label), modifier = Modifier.weight(1f))
-                Switch(checked = reminderEnabled, onCheckedChange = { reminderEnabled = it })
-            }
-        }
+        ListItem(
+            modifier = Modifier.fillMaxWidth(),
+            headlineContent = { Text(stringResource(R.string.schedule_reminder_label)) },
+            supportingContent = {
+                Text(
+                    if (reminderEnabled) {
+                        stringResource(
+                            R.string.schedule_reminder_enabled_supporting,
+                            reminderDescription(schedule.remindBeforeMinutes ?: defaultReminderMinutes.toLong()),
+                        )
+                    } else {
+                        stringResource(R.string.schedule_reminder_disabled_supporting)
+                    },
+                )
+            },
+            trailingContent = { Switch(checked = reminderEnabled, onCheckedChange = { reminderEnabled = it }) },
+        )
         Spacer(Modifier.height(24.dp))
         Button(
             onClick = {
@@ -262,6 +285,7 @@ fun ScheduleEditorScreen(
             modifier = Modifier.fillMaxWidth(),
         ) { Text(stringResource(R.string.save_schedule)) }
         Spacer(Modifier.height(20.dp))
+    }
     }
 
     datePickerTarget?.let { target ->
@@ -313,6 +337,14 @@ private enum class DateTarget { START, END }
 private fun newStep(scheduleId: Long) = ScheduleStepEntity(scheduleId = scheduleId, title = "", position = 0)
 
 private fun parseTime(value: String): LocalTime? = if (value.isBlank()) null else runCatching { LocalTime.parse(value.trim()) }.getOrNull()
+
+@Composable
+private fun reminderDescription(minutes: Long): String = when {
+    minutes % (7L * 24L * 60L) == 0L -> stringResource(R.string.reminder_before_weeks, minutes / (7L * 24L * 60L))
+    minutes % (24L * 60L) == 0L -> stringResource(R.string.reminder_before_days, minutes / (24L * 60L))
+    minutes % 60L == 0L -> stringResource(R.string.reminder_before_hours, minutes / 60L)
+    else -> stringResource(R.string.reminder_before_minutes, minutes)
+}
 
 @Composable
 private fun statusLabel(status: ScheduleStatus): String = when (status) {

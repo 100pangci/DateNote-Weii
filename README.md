@@ -83,6 +83,24 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 4. 点击“保存助手设置”，再点击“试试能不能连上”。
 5. 进入“帮我记”，整理结果会先出现在确认页面，用户确认后才会保存。
 
+### 为指定用户预置 AI 配置
+
+如果需要给特定用户生成已经配置好 AI 的 APK，可以在仓库根目录创建 `.env`。`.env` 不会提交到 Git。请使用下面三个固定键名：
+
+```text
+WEII_AI_BASE_URL = "https://example.com/v1"
+WEII_AI_API_KEY = "your-api-key"
+WEII_AI_MODEL = "your-model"
+```
+
+使用 `-Pweii` 编译时才会读取这三个键：
+
+```bash
+./gradlew -Pweii assembleRelease
+```
+
+该配置会写入 APK，并在首次启动且设备尚未配置 AI 时导入本地设置。API Key 一旦写入 APK 就不再是秘密，只适合个人分发，不要把生成的 APK 上传到公开渠道。
+
 接口需要兼容：
 
 ```text

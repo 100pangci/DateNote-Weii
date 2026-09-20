@@ -15,12 +15,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 
-@OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModel(
     private val repository: ScheduleRepository,
     private val reminderScheduler: ReminderScheduler,
@@ -32,17 +29,21 @@ class HomeViewModel(
     val selectedDay: StateFlow<LocalDate> = selectedDate
     val month: StateFlow<YearMonth> = displayedMonth
 
-    val monthSchedules: StateFlow<List<ScheduleWithSteps>> = displayedMonth
-        .flatMapLatest { value ->
-            repository.observeForMonthWithSteps(
-                value.atDay(1).toEpochDay(),
-                value.atEndOfMonth().toEpochDay(),
-            )
-        }
+    /**
+     * Keep one observation for the calendar instead of starting a Room query for
+     * every pager page while the user is dragging between months.
+     */
+    val allSchedulesWithSteps: StateFlow<List<ScheduleWithSteps>> = repository.observeAllWithSteps()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val monthSchedules: StateFlow<List<ScheduleWithSteps>> = combine(
+        allSchedulesWithSteps,
+        displayedMonth,
+    ) { schedules, value -> schedulesForMonth(schedules, value) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val selectedSchedules: StateFlow<List<ScheduleWithSteps>> = combine(
-        monthSchedules,
+        allSchedulesWithSteps,
         selectedDate,
     ) { schedules, date ->
         val epochDay = date.toEpochDay()
@@ -57,8 +58,12 @@ class HomeViewModel(
 
     fun changeMonth(delta: Long) {
         val next = displayedMonth.value.plusMonths(delta)
-        displayedMonth.value = next
-        selectedDate.value = next.atDay(selectedDate.value.dayOfMonth.coerceAtMost(next.lengthOfMonth()))
+        setMonth(next)
+    }
+
+    fun setMonth(value: YearMonth) {
+        displayedMonth.value = value
+        selectedDate.value = value.atDay(selectedDate.value.dayOfMonth.coerceAtMost(value.lengthOfMonth()))
     }
 
     fun insert(schedule: ScheduleEntity, steps: List<ScheduleStepEntity> = emptyList(), onSaved: () -> Unit) {
@@ -117,5 +122,14 @@ class HomeViewModel(
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T = HomeViewModel(repository, reminderScheduler, defaultReminderTimeMinutes) as T
+    }
+
+    private fun schedulesForMonth(
+        schedules: List<ScheduleWithSteps>,
+        month: YearMonth,
+    ): List<ScheduleWithSteps> {
+        val start = month.atDay(1).toEpochDay()
+        val end = month.atEndOfMonth().toEpochDay()
+        return schedules.filter { it.schedule.startEpochDay <= end && it.schedule.endEpochDay >= start }
     }
 }

@@ -25,8 +25,10 @@ fun statusAfterStepChange(
 ): ScheduleStatus {
     if (steps.isEmpty()) return currentStatus
     val completed = steps.count { it.isCompleted }
+    // Step progress can start or continue the parent task, but finishing every
+    // step does not itself confirm that the parent task is done.
     return when {
-        completed == steps.size -> ScheduleStatus.COMPLETED
+        completed == steps.size && currentStatus == ScheduleStatus.COMPLETED -> ScheduleStatus.COMPLETED
         completed > 0 -> ScheduleStatus.IN_PROGRESS
         currentStatus == ScheduleStatus.COMPLETED -> ScheduleStatus.IN_PROGRESS
         else -> currentStatus
