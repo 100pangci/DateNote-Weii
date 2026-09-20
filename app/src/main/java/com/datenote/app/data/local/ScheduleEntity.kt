@@ -11,7 +11,8 @@ data class ScheduleEntity(
     val id: Long = 0,
     val title: String,
     val note: String = "",
-    override val scheduledEpochDay: Long,
+    override val startEpochDay: Long,
+    override val endEpochDay: Long = startEpochDay,
     val minuteOfDay: Int? = null,
     val category: String? = null,
     override val status: ScheduleStatus = ScheduleStatus.TODO,
@@ -20,4 +21,8 @@ data class ScheduleEntity(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val completedAt: Long? = null,
-) : ScheduleDateLike
+) : ScheduleDateLike {
+    init {
+        require(endEpochDay >= startEpochDay) { "endEpochDay must not be before startEpochDay" }
+    }
+}

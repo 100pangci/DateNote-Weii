@@ -9,6 +9,7 @@ import com.datenote.app.data.remote.AiRepository
 import com.datenote.app.domain.parser.AiParseException
 import com.datenote.app.domain.parser.ValidatedAiResult
 import com.datenote.app.data.local.ScheduleEntity
+import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
 import com.datenote.app.reminder.ReminderScheduler
 import kotlinx.coroutines.Job
@@ -68,13 +69,13 @@ class AiInputViewModel(
         _state.value = _state.value.copy(result = null, error = null)
     }
 
-    fun saveSchedules(schedules: List<ScheduleEntity>, onFinished: (Boolean) -> Unit) {
+    fun saveSchedules(schedules: List<ScheduleWithSteps>, onFinished: (Boolean) -> Unit) {
         if (schedules.isEmpty()) return onFinished(false)
         viewModelScope.launch {
-            val result = runCatching { scheduleRepository.insertAll(schedules) }
-            result.onSuccess { ids ->
-                schedules.forEachIndexed { index, schedule ->
-                    reminderScheduler.sync(schedule.copy(id = ids[index]), defaultReminderTimeMinutes)
+            val result = runCatching {
+                schedules.map { draft ->
+                    val id = scheduleRepository.saveWithSteps(draft.schedule, draft.orderedSteps)
+                    reminderScheduler.sync(draft.schedule.copy(id = id), defaultReminderTimeMinutes)
                 }
             }
             onFinished(result.isSuccess)

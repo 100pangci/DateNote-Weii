@@ -17,6 +17,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -36,9 +37,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.datenote.app.R
 import com.datenote.app.data.local.ScheduleEntity
+import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
 import com.datenote.app.reminder.ReminderScheduler
 import com.datenote.app.domain.model.ScheduleStatus
+import com.datenote.app.domain.model.progress
 import java.time.LocalDate
 
 @Composable
@@ -52,7 +55,8 @@ fun AllSchedulesScreen(
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
     val schedules by viewModel.schedules.collectAsStateWithLifecycle()
-    var pendingDelete by remember { mutableStateOf<ScheduleEntity?>(null) }
+    var pendingDelete by remember { mutableStateOf<ScheduleWithSteps?>(null) }
+    var pendingComplete by remember { mutableStateOf<ScheduleWithSteps?>(null) }
     val filters = listOf(
         ScheduleFilter.ALL to R.string.all_filter_all,
         ScheduleFilter.RECENT to R.string.all_filter_recent,
@@ -82,11 +86,15 @@ fun AllSchedulesScreen(
             EmptyAllState(filter = filter, query = query)
         } else {
             LazyColumn(contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(schedules, key = { it.id }) { schedule ->
+                items(schedules, key = { it.schedule.id }) { schedule ->
                     AllScheduleRow(
                         schedule = schedule,
-                        onClick = { onEdit(schedule.id) },
-                        onToggle = { viewModel.toggleCompleted(schedule) },
+                        onClick = { onEdit(schedule.schedule.id) },
+                        onToggle = {
+                            if (schedule.schedule.status == ScheduleStatus.COMPLETED) viewModel.toggleCompleted(schedule)
+                            else if (schedule.progress.hasSteps && schedule.progress.completedCount < schedule.progress.totalCount) pendingComplete = schedule
+                            else viewModel.markCompleted(schedule, false)
+                        },
                         onDelete = { pendingDelete = schedule },
                     )
                 }
@@ -102,22 +110,38 @@ fun AllSchedulesScreen(
             confirmButton = { TextButton(onClick = { viewModel.delete(schedule); pendingDelete = null }) { Text(stringResource(R.string.confirm_delete), color = MaterialTheme.colorScheme.error) } },
         )
     }
+    pendingComplete?.let { schedule ->
+        AlertDialog(
+            onDismissRequest = { pendingComplete = null },
+            title = { Text(stringResource(R.string.incomplete_steps_title)) },
+            text = { Text(stringResource(R.string.incomplete_steps_message)) },
+            dismissButton = { TextButton(onClick = { pendingComplete = null }) { Text(stringResource(R.string.check_again)) } },
+            confirmButton = { TextButton(onClick = { viewModel.markCompleted(schedule, true); pendingComplete = null }) { Text(stringResource(R.string.complete_all)) } },
+        )
+    }
 }
 
 @Composable
-private fun AllScheduleRow(schedule: ScheduleEntity, onClick: () -> Unit, onToggle: () -> Unit, onDelete: () -> Unit) {
+ private fun AllScheduleRow(schedule: ScheduleWithSteps, onClick: () -> Unit, onToggle: () -> Unit, onDelete: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = if (schedule.status == ScheduleStatus.COMPLETED) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .5f) else MaterialTheme.colorScheme.surfaceContainer),
+         colors = CardDefaults.cardColors(containerColor = if (schedule.schedule.status == ScheduleStatus.COMPLETED) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .5f) else MaterialTheme.colorScheme.surfaceContainer),
         onClick = onClick,
     ) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(schedule.status == ScheduleStatus.COMPLETED, onCheckedChange = { onToggle() })
-            Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
-                Text(schedule.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                val date = LocalDate.ofEpochDay(schedule.scheduledEpochDay)
-                Text(stringResource(R.string.date_month_day, date.monthValue, date.dayOfMonth) + schedule.category?.let { " · $it" }.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (schedule.note.isNotBlank()) Text(schedule.note, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+             Checkbox(schedule.schedule.status == ScheduleStatus.COMPLETED, onCheckedChange = { onToggle() })
+             Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                 Text(schedule.schedule.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                 val start = LocalDate.ofEpochDay(schedule.schedule.startEpochDay)
+                 val end = LocalDate.ofEpochDay(schedule.schedule.endEpochDay)
+                 Text(if (start == end) "${start.monthValue}月${start.dayOfMonth}日" else "${start.monthValue}月${start.dayOfMonth}日～${end.monthValue}月${end.dayOfMonth}日", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                 if (schedule.schedule.category != null) Text(schedule.schedule.category!!, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                 if (schedule.schedule.note.isNotBlank()) Text(schedule.schedule.note, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                 if (schedule.progress.hasSteps) {
+                     Text(stringResource(R.string.progress_completed, schedule.progress.completedCount, schedule.progress.totalCount), style = MaterialTheme.typography.labelMedium)
+                     LinearProgressIndicator(progress = { schedule.progress.fraction }, modifier = Modifier.fillMaxWidth())
+                     schedule.orderedSteps.firstOrNull { !it.isCompleted }?.let { next -> Text(stringResource(R.string.next_step, next.title), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium) }
+                 }
             }
             TextButton(onClick = onDelete) { Text(stringResource(R.string.delete_schedule)) }
         }

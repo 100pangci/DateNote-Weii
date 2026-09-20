@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.datenote.app.data.local.ScheduleEntity
+import com.datenote.app.data.local.ScheduleStepEntity
 import com.datenote.app.data.repository.ScheduleRepository
 import com.datenote.app.domain.model.ScheduleStatus
 import com.datenote.app.reminder.ReminderScheduler
@@ -16,6 +17,7 @@ import kotlinx.coroutines.launch
 data class EditorState(
     val isLoading: Boolean = true,
     val schedule: ScheduleEntity? = null,
+    val steps: List<ScheduleStepEntity> = emptyList(),
 )
 
 class ScheduleEditorViewModel(
@@ -30,31 +32,35 @@ class ScheduleEditorViewModel(
 
     init {
         viewModelScope.launch {
-            val schedule = scheduleId?.let { repository.getById(it) }
-                ?: ScheduleEntity(
-                    title = "",
-                    scheduledEpochDay = LocalDate.now().toEpochDay(),
-                    status = ScheduleStatus.TODO,
-                    remindBeforeMinutes = defaultReminderMinutes.toLong(),
-                )
-            _state.value = EditorState(isLoading = false, schedule = schedule)
+            val loaded = scheduleId?.let { repository.getWithSteps(it) }
+            val schedule = loaded?.schedule ?: ScheduleEntity(
+                title = "",
+                startEpochDay = LocalDate.now().toEpochDay(),
+                status = ScheduleStatus.TODO,
+                remindBeforeMinutes = defaultReminderMinutes.toLong(),
+            )
+            _state.value = EditorState(isLoading = false, schedule = schedule, steps = loaded?.orderedSteps.orEmpty())
         }
     }
 
-    fun save(schedule: ScheduleEntity, onSaved: () -> Unit) {
+    fun save(schedule: ScheduleEntity, steps: List<ScheduleStepEntity>, onSaved: () -> Unit) {
         viewModelScope.launch {
             val normalized = schedule.copy(
                 title = schedule.title.trim(),
                 note = schedule.note.trim(),
                 category = schedule.category?.trim()?.takeIf { it.isNotEmpty() },
+                endEpochDay = maxOf(schedule.startEpochDay, schedule.endEpochDay),
                 updatedAt = System.currentTimeMillis(),
             )
-            val saved = if (normalized.id == 0L) {
-                normalized.copy(id = repository.insert(normalized))
-            } else {
-                repository.update(normalized)
-                normalized
+            val normalizedSteps = steps.mapIndexed { index, step ->
+                step.copy(
+                    title = step.title.trim(),
+                    position = index,
+                    updatedAt = System.currentTimeMillis(),
+                )
             }
+            val id = repository.saveWithSteps(normalized, normalizedSteps)
+            val saved = normalized.copy(id = id)
             reminderScheduler.sync(saved, defaultReminderTimeMinutes)
             onSaved()
         }

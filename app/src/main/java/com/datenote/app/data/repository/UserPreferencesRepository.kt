@@ -15,6 +15,8 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 data class UserPreferences(
     val nickname: String = "",
+    val notificationGuideCompleted: Boolean = false,
+    val notificationPermissionRequested: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val dynamicColor: Boolean = true,
     val defaultReminderMinutes: Int = 24 * 60,
@@ -26,6 +28,8 @@ data class UserPreferences(
 class UserPreferencesRepository(private val context: Context) {
     private object Keys {
         val nickname = stringPreferencesKey("nickname")
+        val notificationGuideCompleted = booleanPreferencesKey("notification_guide_completed")
+        val notificationPermissionRequested = booleanPreferencesKey("notification_permission_requested")
         val themeMode = stringPreferencesKey("theme_mode")
         val dynamicColor = booleanPreferencesKey("dynamic_color")
         val defaultReminderMinutes = intPreferencesKey("default_reminder_minutes")
@@ -37,6 +41,8 @@ class UserPreferencesRepository(private val context: Context) {
     val preferences: Flow<UserPreferences> = context.userPreferencesDataStore.data.map { values ->
         UserPreferences(
             nickname = values[Keys.nickname].orEmpty(),
+            notificationGuideCompleted = values[Keys.notificationGuideCompleted] ?: false,
+            notificationPermissionRequested = values[Keys.notificationPermissionRequested] ?: false,
             themeMode = values[Keys.themeMode]
                 ?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() }
                 ?: ThemeMode.SYSTEM,
@@ -50,6 +56,14 @@ class UserPreferencesRepository(private val context: Context) {
 
     suspend fun setNickname(nickname: String) {
         context.userPreferencesDataStore.edit { it[Keys.nickname] = nickname.trim() }
+    }
+
+    suspend fun setNotificationGuideCompleted(completed: Boolean = true) {
+        context.userPreferencesDataStore.edit { it[Keys.notificationGuideCompleted] = completed }
+    }
+
+    suspend fun setNotificationPermissionRequested(requested: Boolean = true) {
+        context.userPreferencesDataStore.edit { it[Keys.notificationPermissionRequested] = requested }
     }
 
     suspend fun setThemeMode(mode: ThemeMode) {

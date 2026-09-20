@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -30,29 +32,39 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.datenote.app.R
 import com.datenote.app.data.local.ScheduleEntity
+import com.datenote.app.data.local.ScheduleStepEntity
+import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.data.remote.AiRepository
 import com.datenote.app.data.repository.ScheduleRepository
 import com.datenote.app.reminder.ReminderScheduler
+import com.datenote.app.reminder.NotificationAccess
+import com.datenote.app.ui.reminder.NotificationUnavailableDialog
 import com.datenote.app.domain.parser.ParsedSchedule
+import com.datenote.app.domain.parser.ParsedStep
 import java.time.LocalDate
 import java.time.LocalTime
 
 private data class EditableAiDraft(
     val id: Long,
     val title: String,
-    val date: String,
+    val startDate: String,
+    val endDate: String,
     val time: String,
     val category: String,
     val note: String,
     val reminder: String,
     val reminderEnabled: Boolean,
+    val steps: List<EditableAiStep>,
     val confidence: Double,
     val uncertainties: List<String>,
 )
+
+private data class EditableAiStep(val id: Long, val title: String, val isCompleted: Boolean)
 
 @Composable
 fun AiInputScreen(
@@ -61,6 +73,7 @@ fun AiInputScreen(
     defaultReminderMinutes: Int,
     reminderScheduler: ReminderScheduler,
     defaultReminderTimeMinutes: Int,
+    onRequestNotifications: () -> Unit,
 ) {
     val viewModel: AiInputViewModel = viewModel(factory = AiInputViewModel.Factory(aiRepository, repository, reminderScheduler, defaultReminderTimeMinutes))
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -69,6 +82,8 @@ fun AiInputScreen(
     }
     var saveError by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
+    var notificationUnavailable by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     if (state.result == null) {
         InputPage(state = state, onInput = viewModel::setInput, onSubmit = viewModel::submit)
@@ -82,7 +97,7 @@ fun AiInputScreen(
             onRemove = { index -> drafts = drafts.toMutableList().also { it.removeAt(index) } },
             onStartOver = viewModel::startOver,
             onConfirm = {
-                val schedules = drafts.mapNotNull { it.toEntityOrNull() }
+                val schedules = drafts.mapNotNull { it.toScheduleWithStepsOrNull() }
                 if (schedules.size != drafts.size || schedules.isEmpty()) {
                     saveError = true
                 } else {
@@ -91,10 +106,27 @@ fun AiInputScreen(
                         saving = false
                         if (success) {
                             saveError = false
-                            viewModel.startOver()
+                            if (schedules.any { it.schedule.remindBeforeMinutes != null } && !NotificationAccess.status(context).canPost) {
+                                notificationUnavailable = true
+                            } else {
+                                viewModel.startOver()
+                            }
                         } else saveError = true
                     }
                 }
+            },
+        )
+    }
+    if (notificationUnavailable) {
+        NotificationUnavailableDialog(
+            onEnable = {
+                notificationUnavailable = false
+                onRequestNotifications()
+                viewModel.startOver()
+            },
+            onLater = {
+                notificationUnavailable = false
+                viewModel.startOver()
             },
         )
     }
@@ -196,8 +228,12 @@ private fun DraftCard(draft: EditableAiDraft, onChange: (EditableAiDraft) -> Uni
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(draft.title, { onChange(draft.copy(title = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.schedule_title_label)) })
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(draft.date, { onChange(draft.copy(date = it)) }, Modifier.weight(1f), label = { Text(stringResource(R.string.ai_date)) }, singleLine = true)
+                OutlinedTextField(draft.startDate, { onChange(draft.copy(startDate = it)) }, Modifier.weight(1f), label = { Text(stringResource(R.string.schedule_start_label)) }, singleLine = true)
+                OutlinedTextField(draft.endDate, { onChange(draft.copy(endDate = it)) }, Modifier.weight(1f), label = { Text(stringResource(R.string.schedule_end_label)) }, singleLine = true)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(draft.time, { onChange(draft.copy(time = it)) }, Modifier.weight(1f), label = { Text(stringResource(R.string.ai_time)) }, singleLine = true)
+                Spacer(Modifier.weight(1f))
             }
             OutlinedTextField(draft.category, { onChange(draft.copy(category = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.ai_category)) }, singleLine = true)
             OutlinedTextField(draft.note, { onChange(draft.copy(note = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.ai_note)) }, minLines = 2)
@@ -206,6 +242,21 @@ private fun DraftCard(draft: EditableAiDraft, onChange: (EditableAiDraft) -> Uni
                 Switch(draft.reminderEnabled, { onChange(draft.copy(reminderEnabled = it)) })
             }
             if (draft.reminderEnabled) OutlinedTextField(draft.reminder, { onChange(draft.copy(reminder = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.ai_reminder_minutes)) }, singleLine = true)
+            Text(stringResource(R.string.production_steps), style = MaterialTheme.typography.titleSmall)
+            draft.steps.forEachIndexed { stepIndex, step ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(step.isCompleted, { checked -> onChange(draft.copy(steps = draft.steps.mapIndexed { index, old -> if (index == stepIndex) old.copy(isCompleted = checked) else old })) })
+                    OutlinedTextField(step.title, { value -> onChange(draft.copy(steps = draft.steps.mapIndexed { index, old -> if (index == stepIndex) old.copy(title = value) else old })) }, Modifier.weight(1f), label = { Text(stringResource(R.string.step_name)) }, singleLine = true)
+                    TextButton(enabled = stepIndex > 0, onClick = {
+                        val reordered = draft.steps.toMutableList(); val previous = reordered[stepIndex - 1]; reordered[stepIndex - 1] = reordered[stepIndex]; reordered[stepIndex] = previous; onChange(draft.copy(steps = reordered))
+                    }) { Text("↑") }
+                    TextButton(enabled = stepIndex < draft.steps.lastIndex, onClick = {
+                        val reordered = draft.steps.toMutableList(); val next = reordered[stepIndex + 1]; reordered[stepIndex + 1] = reordered[stepIndex]; reordered[stepIndex] = next; onChange(draft.copy(steps = reordered))
+                    }) { Text("↓") }
+                    TextButton(onClick = { onChange(draft.copy(steps = draft.steps.filterIndexed { index, _ -> index != stepIndex })) }) { Text(stringResource(R.string.delete_step)) }
+                }
+            }
+            TextButton(onClick = { onChange(draft.copy(steps = draft.steps + EditableAiStep(System.nanoTime(), "", false))) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.add_step)) }
             Text(stringResource(R.string.ai_confidence, (draft.confidence * 100).toInt()), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
             if (draft.uncertainties.isNotEmpty()) {
                 Text(stringResource(R.string.ai_uncertain_title), color = MaterialTheme.colorScheme.error)
@@ -220,26 +271,37 @@ private fun DraftCard(draft: EditableAiDraft, onChange: (EditableAiDraft) -> Uni
 private fun ParsedSchedule.toEditable(defaultReminder: Int, id: Long): EditableAiDraft = EditableAiDraft(
     id = id,
     title = title,
-    date = date.toString(),
+    startDate = startDate.toString(),
+    endDate = endDate.toString(),
     time = time?.toString()?.take(5).orEmpty(),
     category = category.orEmpty(),
     note = note,
     reminder = (remindBeforeMinutes ?: defaultReminder.toLong()).toString(),
     reminderEnabled = remindBeforeMinutes != null,
+    steps = steps.mapIndexed { index, step -> EditableAiStep(index.toLong(), step.title, step.isCompleted) },
     confidence = confidence,
     uncertainties = uncertainties,
 )
 
-private fun EditableAiDraft.toEntityOrNull(): ScheduleEntity? {
-    val parsedDate = runCatching { LocalDate.parse(date.trim()) }.getOrNull() ?: return null
+private fun EditableAiDraft.toScheduleWithStepsOrNull(): ScheduleWithSteps? {
+    val parsedStart = runCatching { LocalDate.parse(startDate.trim()) }.getOrNull() ?: return null
+    val parsedEnd = runCatching { LocalDate.parse(endDate.trim()) }.getOrNull() ?: return null
+    if (parsedEnd.isBefore(parsedStart)) return null
     val parsedTime = time.trim().takeIf { it.isNotEmpty() }?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: if (time.isBlank()) null else return null
     val reminderMinutes = if (reminderEnabled) reminder.trim().toLongOrNull()?.takeIf { it in 0..43_200 } ?: return null else null
-    return ScheduleEntity(
+    val schedule = ScheduleEntity(
         title = title.trim().takeIf { it.isNotEmpty() } ?: return null,
-        scheduledEpochDay = parsedDate.toEpochDay(),
+        startEpochDay = parsedStart.toEpochDay(),
+        endEpochDay = parsedEnd.toEpochDay(),
         minuteOfDay = parsedTime?.let { it.hour * 60 + it.minute },
         category = category.trim().takeIf { it.isNotEmpty() },
         note = note.trim(),
         remindBeforeMinutes = reminderMinutes,
     )
+    val parsedSteps = steps.mapIndexedNotNull { index, step ->
+        step.title.trim().takeIf { it.isNotEmpty() }?.let { title ->
+            ScheduleStepEntity(scheduleId = 0, title = title, position = index, isCompleted = step.isCompleted, completedAt = if (step.isCompleted) System.currentTimeMillis() else null)
+        }
+    }
+    return ScheduleWithSteps(schedule, parsedSteps)
 }

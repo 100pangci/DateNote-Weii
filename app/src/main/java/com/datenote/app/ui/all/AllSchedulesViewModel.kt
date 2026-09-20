@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.datenote.app.data.local.ScheduleEntity
+import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
 import com.datenote.app.domain.model.ScheduleStatus
 import com.datenote.app.reminder.ReminderScheduler
@@ -29,18 +30,18 @@ class AllSchedulesViewModel(
     val query: StateFlow<String> = searchQuery
     private val all = repository.observeAll()
 
-    val schedules: StateFlow<List<ScheduleEntity>> = combine(all, selectedFilter, searchQuery) { values, filter, query ->
+    val schedules: StateFlow<List<ScheduleWithSteps>> = combine(repository.observeAllWithSteps(), selectedFilter, searchQuery) { values, filter, query ->
         val today = LocalDate.now().toEpochDay()
         val normalizedQuery = query.trim()
         values.asSequence()
-            .filter { normalizedQuery.isBlank() || it.title.contains(normalizedQuery, true) || it.note.contains(normalizedQuery, true) }
+            .filter { normalizedQuery.isBlank() || it.schedule.title.contains(normalizedQuery, true) || it.schedule.note.contains(normalizedQuery, true) }
             .filter {
                 when (filter) {
                     ScheduleFilter.ALL -> true
-                    ScheduleFilter.RECENT -> it.status != ScheduleStatus.COMPLETED && it.scheduledEpochDay in today..(today + 30)
-                    ScheduleFilter.TODAY -> it.scheduledEpochDay == today
-                    ScheduleFilter.OVERDUE -> it.status != ScheduleStatus.COMPLETED && it.scheduledEpochDay < today
-                    ScheduleFilter.COMPLETED -> it.status == ScheduleStatus.COMPLETED
+                    ScheduleFilter.RECENT -> it.schedule.status != ScheduleStatus.COMPLETED && it.schedule.startEpochDay <= today + 30 && it.schedule.endEpochDay >= today
+                    ScheduleFilter.TODAY -> it.schedule.startEpochDay <= today && it.schedule.endEpochDay >= today
+                    ScheduleFilter.OVERDUE -> it.schedule.status != ScheduleStatus.COMPLETED && it.schedule.endEpochDay < today
+                    ScheduleFilter.COMPLETED -> it.schedule.status == ScheduleStatus.COMPLETED
                 }
             }
             .toList()
@@ -49,10 +50,10 @@ class AllSchedulesViewModel(
     fun setFilter(value: ScheduleFilter) { selectedFilter.value = value }
     fun setQuery(value: String) { searchQuery.value = value }
 
-    fun toggleCompleted(schedule: ScheduleEntity) {
-        val completed = schedule.status == ScheduleStatus.COMPLETED
+    fun toggleCompleted(schedule: ScheduleWithSteps) {
+        val completed = schedule.schedule.status == ScheduleStatus.COMPLETED
         viewModelScope.launch {
-            val updated = schedule.copy(
+            val updated = schedule.schedule.copy(
                 status = if (completed) ScheduleStatus.TODO else ScheduleStatus.COMPLETED,
                 completedAt = if (completed) null else System.currentTimeMillis(),
                 updatedAt = System.currentTimeMillis(),
@@ -62,7 +63,15 @@ class AllSchedulesViewModel(
         }
     }
 
-    fun delete(schedule: ScheduleEntity) { viewModelScope.launch { repository.delete(schedule); reminderScheduler.cancel(schedule.id) } }
+    fun markCompleted(schedule: ScheduleWithSteps, completeSteps: Boolean) {
+        viewModelScope.launch {
+            repository.setStatus(schedule.schedule.id, ScheduleStatus.COMPLETED, completeSteps)?.let {
+                reminderScheduler.sync(it, defaultReminderTimeMinutes)
+            }
+        }
+    }
+
+    fun delete(schedule: ScheduleWithSteps) { viewModelScope.launch { repository.delete(schedule.schedule); reminderScheduler.cancel(schedule.schedule.id) } }
 
     class Factory(
         private val repository: ScheduleRepository,

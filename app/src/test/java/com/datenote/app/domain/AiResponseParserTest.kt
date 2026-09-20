@@ -49,4 +49,25 @@ class AiResponseParserTest {
         val result = parser.parse("""{"items":[{"title":"凛","date":"2026-11-01"},{"title":"凛","date":"2026-11-01"}],"warnings":[]}""", LocalDate.of(2026, 9, 20))
         assertTrue(result.warnings.any { it.contains("重复") })
     }
+
+    @Test fun parsesDateRangeAndOrderedStepsIncludingCompletedState() {
+        val result = parser.parse(
+            """{"items":[{"title":"制作小优的衣服","startDate":"2026-10-10","endDate":"2026-10-17","steps":[{"title":"买材料","isCompleted":true},{"title":"制作","isCompleted":false},{"title":"打包","isCompleted":false}]}],"warnings":[]}""",
+            LocalDate.of(2026, 9, 20),
+        )
+        val item = result.items.single()
+        assertEquals(LocalDate.of(2026, 10, 10), item.startDate)
+        assertEquals(LocalDate.of(2026, 10, 17), item.endDate)
+        assertEquals(listOf("买材料", "制作", "打包"), item.steps.map { it.title })
+        assertTrue(item.steps.first().isCompleted)
+    }
+
+    @Test fun missingStartDateIsMarkedUncertainWhenOnlyEndDateExists() {
+        val item = parser.parse(
+            """{"items":[{"title":"发美肌","endDate":"2026-10-20"}],"warnings":[]}""",
+            LocalDate.of(2026, 9, 20),
+        ).items.single()
+        assertEquals(item.startDate, item.endDate)
+        assertTrue(item.uncertainties.any { it.contains("开始日期") })
+    }
 }

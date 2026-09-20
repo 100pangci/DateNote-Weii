@@ -12,10 +12,14 @@ import com.datenote.app.data.repository.UserPreferences
 import com.datenote.app.data.repository.UserPreferencesRepository
 import com.datenote.app.data.secure.SecureApiKeyStore
 import com.datenote.app.reminder.ReminderScheduler
-import com.datenote.app.data.local.ScheduleEntity
+import com.datenote.app.reminder.ReminderReliability
+import com.datenote.app.reminder.NotificationAccess
+import android.content.Context
+import com.datenote.app.data.local.ScheduleWithSteps
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 enum class ConnectionState { IDLE, TESTING, SUCCESS, FAILED }
@@ -24,6 +28,7 @@ data class SettingsState(
     val preferences: UserPreferences = UserPreferences(),
     val apiKey: String = "",
     val connectionState: ConnectionState = ConnectionState.IDLE,
+    val reliability: ReminderReliability? = null,
 )
 
 class SettingsViewModel(
@@ -48,6 +53,10 @@ class SettingsViewModel(
     fun setDynamicColor(value: Boolean) { viewModelScope.launch { preferencesRepository.setDynamicColor(value) } }
     fun setDefaultReminder(value: Int) { viewModelScope.launch { preferencesRepository.setDefaultReminderMinutes(value) } }
     fun setDefaultReminderTime(value: Int) { viewModelScope.launch { preferencesRepository.setDefaultReminderTimeMinutes(value) } }
+
+    fun refreshReliability(context: Context) {
+        _state.value = _state.value.copy(reliability = NotificationAccess.reliability(context))
+    }
 
     fun saveAiSettings(baseUrl: String, model: String) {
         keyStore.save(_state.value.apiKey)
@@ -76,15 +85,17 @@ class SettingsViewModel(
         viewModelScope.launch { scheduleRepository.deleteAll(); reminderScheduler.cancelAll(); onFinished() }
     }
 
-    fun restoreSchedules(schedules: List<ScheduleEntity>, replace: Boolean, onFinished: (Boolean) -> Unit) {
+    fun restoreSchedules(schedules: List<ScheduleWithSteps>, replace: Boolean, onFinished: (Boolean) -> Unit) {
         viewModelScope.launch {
             val result = runCatching {
-                val ids = if (replace) {
+                if (replace) {
                     reminderScheduler.cancelAll()
-                    scheduleRepository.replaceAll(schedules)
-                } else scheduleRepository.insertAll(schedules)
-                schedules.forEachIndexed { index, schedule ->
-                    reminderScheduler.sync(schedule.copy(id = ids[index]), _state.value.preferences.defaultReminderTimeMinutes)
+                    scheduleRepository.replaceAllWithSteps(schedules)
+                } else {
+                    schedules.map { scheduleRepository.saveWithSteps(it.schedule, it.orderedSteps) }
+                }
+                scheduleRepository.observeAll().first().forEach { schedule ->
+                    reminderScheduler.sync(schedule, _state.value.preferences.defaultReminderTimeMinutes)
                 }
             }
             onFinished(result.isSuccess)

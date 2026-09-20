@@ -26,14 +26,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.datenote.app.BuildConfig
@@ -44,11 +49,12 @@ import com.datenote.app.data.repository.UserPreferencesRepository
 import com.datenote.app.data.remote.AiRepository
 import com.datenote.app.data.secure.SecureApiKeyStore
 import com.datenote.app.reminder.ReminderScheduler
+import com.datenote.app.reminder.ReminderSettings
 import com.datenote.app.data.backup.BackupDocument
 import com.datenote.app.data.backup.BackupSchedule
 import com.datenote.app.data.backup.toBackup
-import com.datenote.app.data.backup.toEntity
-import com.datenote.app.data.local.ScheduleEntity
+import com.datenote.app.data.backup.toScheduleWithSteps
+import com.datenote.app.data.local.ScheduleWithSteps
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -63,6 +69,7 @@ fun SettingsScreen(
     aiRepository: AiRepository,
     scheduleRepository: ScheduleRepository,
     reminderScheduler: ReminderScheduler,
+    onRequestNotifications: () -> Unit,
 ) {
     val viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory(preferencesRepository, keyStore, aiRepository, scheduleRepository, reminderScheduler))
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -75,9 +82,20 @@ fun SettingsScreen(
     var clearDialog by remember { mutableStateOf(false) }
     var savedMessageVisible by remember { mutableStateOf(false) }
     var feedback by remember { mutableStateOf<String?>(null) }
-    var pendingImport by remember { mutableStateOf<List<ScheduleEntity>?>(null) }
+    var pendingImport by remember { mutableStateOf<List<ScheduleWithSteps>?>(null) }
     var replaceDialog by remember { mutableStateOf(false) }
+    var expandedSections by rememberSaveable { mutableStateOf(setOf("personalization")) }
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var reliabilityGuideVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { viewModel.refreshReliability(context) }
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshReliability(context)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val backupFailedText = stringResource(R.string.backup_failed)
     val backupSavedText = stringResource(R.string.backup_saved)
     val backupRestoredText = stringResource(R.string.backup_restored)
@@ -87,8 +105,8 @@ fun SettingsScreen(
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) scope.launch {
             val success = runCatching {
-                val schedules = withContext(Dispatchers.IO) { scheduleRepository.observeAll().first() }
-                val document = BackupDocument(exportedAt = System.currentTimeMillis(), schedules = schedules.map(ScheduleEntity::toBackup))
+                    val schedules = withContext(Dispatchers.IO) { scheduleRepository.observeAllWithSteps().first() }
+                    val document = BackupDocument(exportedAt = System.currentTimeMillis(), schedules = schedules.map { it.toBackup() })
                 withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri)?.use { it.write(backupJson.encodeToString(document).toByteArray()) } ?: error("write") }
             }.isSuccess
             feedback = if (success) backupSavedText else backupFailedText
@@ -100,8 +118,8 @@ fun SettingsScreen(
                 runCatching {
                     val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: error("read")
                     backupJson.decodeFromString<BackupDocument>(text).let { document ->
-                        require(document.schemaVersion == 1)
-                        document.schedules.mapNotNull(BackupSchedule::toEntity)
+                        require(document.schemaVersion in 1..2)
+                        document.schedules.mapNotNull(BackupSchedule::toScheduleWithSteps)
                     }
                 }.getOrNull()
             }
@@ -116,7 +134,11 @@ fun SettingsScreen(
     ) {
         item { Text(stringResource(R.string.settings), style = MaterialTheme.typography.headlineSmall) }
         item {
-            SettingsSectionTitle(stringResource(R.string.settings_personalization))
+            CollapsibleSettingsSection(
+                title = stringResource(R.string.settings_personalization),
+                expanded = "personalization" in expandedSections,
+                onToggle = { expandedSections = expandedSections.toggle("personalization") },
+            ) {
             Card {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     TextButton(onClick = { nicknameDialog = true }, modifier = Modifier.fillMaxWidth()) {
@@ -137,9 +159,14 @@ fun SettingsScreen(
                     }
                 }
             }
+            }
         }
         item {
-            SettingsSectionTitle(stringResource(R.string.settings_ai))
+            CollapsibleSettingsSection(
+                title = stringResource(R.string.settings_ai),
+                expanded = "ai" in expandedSections,
+                onToggle = { expandedSections = expandedSections.toggle("ai") },
+            ) {
             Card {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(baseUrl, { baseUrl = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.base_url)) }, supportingText = { Text(stringResource(R.string.base_url_support)) }, singleLine = true)
@@ -155,9 +182,14 @@ fun SettingsScreen(
                     if (savedMessageVisible) Text(stringResource(R.string.connection_success), color = MaterialTheme.colorScheme.primary)
                 }
             }
+            }
         }
         item {
-            SettingsSectionTitle(stringResource(R.string.settings_reminders))
+            CollapsibleSettingsSection(
+                title = stringResource(R.string.settings_reminders),
+                expanded = "reminders" in expandedSections,
+                onToggle = { expandedSections = expandedSections.toggle("reminders") },
+            ) {
             Card {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(stringResource(R.string.default_reminder), style = MaterialTheme.typography.titleMedium)
@@ -172,9 +204,52 @@ fun SettingsScreen(
                     }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.default_reminder_time)) }, supportingText = { Text(stringResource(R.string.time_format_hint)) }, singleLine = true)
                 }
             }
+            }
         }
         item {
-            SettingsSectionTitle(stringResource(R.string.settings_data))
+            CollapsibleSettingsSection(
+                title = stringResource(R.string.settings_reminder_reliability),
+                expanded = "reliability" in expandedSections,
+                onToggle = { expandedSections = expandedSections.toggle("reliability") },
+            ) {
+            Card {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val reliability = state.reliability
+                    ReliabilityRow(
+                        stringResource(R.string.reliability_notification_permission),
+                        if (reliability?.notificationStatus?.permissionGranted == true && reliability.notificationStatus.appNotificationsEnabled) stringResource(R.string.reliability_enabled) else stringResource(R.string.reliability_not_enabled),
+                        reliability?.notificationStatus?.permissionGranted == true && reliability.notificationStatus.appNotificationsEnabled,
+                    )
+                    ReliabilityRow(
+                        stringResource(R.string.reliability_channel),
+                        if (reliability?.notificationStatus?.channelEnabled == true) stringResource(R.string.reliability_available) else stringResource(R.string.reliability_closed),
+                        reliability?.notificationStatus?.channelEnabled == true,
+                    )
+                    ReliabilityRow(
+                        stringResource(R.string.reliability_battery),
+                        if (reliability?.batteryOptimizationIgnored == true) stringResource(R.string.reliability_battery_ok) else stringResource(R.string.reliability_battery_limited),
+                        reliability?.batteryOptimizationIgnored == true,
+                    )
+                    ReliabilityRow(
+                        stringResource(R.string.reliability_autostart),
+                        stringResource(R.string.reliability_manual),
+                        null,
+                    )
+                    Text(stringResource(R.string.reliability_background_hint), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(onClick = onRequestNotifications, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.reliability_check_notifications)) }
+                    Button(onClick = { ReminderSettings.openAppDetails(context) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.reliability_check_background)) }
+                    Button(onClick = { ReminderSettings.openBatterySettings(context) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.reliability_check_battery)) }
+                    TextButton(onClick = { reliabilityGuideVisible = true }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.reliability_view_guide)) }
+                }
+            }
+            }
+        }
+        item {
+            CollapsibleSettingsSection(
+                title = stringResource(R.string.settings_data),
+                expanded = "data" in expandedSections,
+                onToggle = { expandedSections = expandedSections.toggle("data") },
+            ) {
             Card {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { exportLauncher.launch(backupFileName) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.export_backup)) }
@@ -183,10 +258,16 @@ fun SettingsScreen(
                 }
             }
             TextButton(onClick = { clearDialog = true }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.clear_all_schedules), color = MaterialTheme.colorScheme.error) }
+            }
         }
         item {
-            SettingsSectionTitle(stringResource(R.string.settings_about))
+            CollapsibleSettingsSection(
+                title = stringResource(R.string.settings_about),
+                expanded = "about" in expandedSections,
+                onToggle = { expandedSections = expandedSections.toggle("about") },
+            ) {
             Card { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium); Text(stringResource(R.string.app_subtitle)); Text(stringResource(R.string.about_description), color = MaterialTheme.colorScheme.onSurfaceVariant); Text(stringResource(R.string.version_name, BuildConfig.VERSION_NAME), color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+            }
         }
     }
 
@@ -228,10 +309,51 @@ fun SettingsScreen(
             }) { Text(stringResource(R.string.backup_replace), color = MaterialTheme.colorScheme.error) } },
         )
     }
+    if (reliabilityGuideVisible) {
+        AlertDialog(
+            onDismissRequest = { reliabilityGuideVisible = false },
+            title = { Text(stringResource(R.string.reliability_guide_title)) },
+            text = { Text(stringResource(R.string.reliability_guide_message, ReminderSettings.vendorName(context), ReminderSettings.vendorGuide(context)) ) },
+            confirmButton = { TextButton(onClick = { reliabilityGuideVisible = false }) { Text(stringResource(R.string.confirm)) } },
+        )
+    }
 }
 
 @Composable
-private fun SettingsSectionTitle(text: String) { Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary) }
+private fun ReliabilityRow(label: String, value: String, enabled: Boolean?) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+        Text(
+            value,
+            color = when (enabled) {
+                true -> MaterialTheme.colorScheme.primary
+                false -> MaterialTheme.colorScheme.error
+                null -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+    }
+}
+
+@Composable
+private fun CollapsibleSettingsSection(
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        TextButton(onClick = onToggle, modifier = Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                Text(if (expanded) "⌃" else "⌄", style = MaterialTheme.typography.titleMedium)
+            }
+        }
+        if (expanded) content()
+    }
+}
+
+private fun Set<String>.toggle(value: String): Set<String> =
+    if (value in this) this - value else this + value
 
 @Composable
 private fun ThemePicker(selected: ThemeMode, onSelect: (ThemeMode) -> Unit) {

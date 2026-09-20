@@ -10,6 +10,8 @@ import androidx.work.workDataOf
 import com.datenote.app.DateNoteApplication
 import com.datenote.app.R
 import com.datenote.app.domain.model.ScheduleStatus
+import com.datenote.app.domain.model.progress
+import com.datenote.app.data.local.ScheduleEntity
 import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneId
@@ -37,6 +39,7 @@ class ReminderScheduler(private val context: Context) {
     fun sync(schedule: com.datenote.app.data.local.ScheduleEntity, defaultReminderTimeMinutes: Int = 9 * 60) {
         cancel(schedule.id)
         if (schedule.remindBeforeMinutes == null || schedule.status == ScheduleStatus.COMPLETED) return
+        if (!NotificationAccess.status(context).canPost) return
         val reminderAt = reminderDateTime(schedule, defaultReminderTimeMinutes)?.atZone(ZoneId.systemDefault()) ?: return
         val delay = Duration.between(ZonedDateTime.now(ZoneId.systemDefault()).toInstant(), reminderAt.toInstant()).toMillis()
         if (delay <= 0) return
@@ -53,6 +56,14 @@ class ReminderScheduler(private val context: Context) {
 
     fun cancelAll() { workManager.cancelAllWorkByTag(ReminderNotifications.WORK_TAG) }
 
+    suspend fun rescheduleAll(schedules: List<ScheduleEntity>, defaultReminderTimeMinutes: Int) {
+        if (!NotificationAccess.status(context).canPost) {
+            cancelAll()
+            return
+        }
+        schedules.forEach { sync(it, defaultReminderTimeMinutes) }
+    }
+
     private fun uniqueName(id: Long): String = "schedule-reminder-$id"
 }
 
@@ -64,16 +75,30 @@ class ScheduleReminderWorker(
         val id = inputData.getLong(ReminderNotifications.SCHEDULE_ID, 0L)
         if (id == 0L) return Result.failure()
         val app = applicationContext as DateNoteApplication
-        val schedule = app.scheduleRepository.getById(id) ?: return Result.success()
+        val scheduleWithSteps = app.scheduleRepository.getWithSteps(id) ?: return Result.success()
+        val schedule = scheduleWithSteps.schedule
         if (schedule.status == ScheduleStatus.COMPLETED || schedule.remindBeforeMinutes == null) return Result.success()
+        if (!NotificationAccess.status(applicationContext).canPost) return Result.success()
         ReminderNotifications.createChannel(applicationContext)
         val today = LocalDate.now()
-        val days = schedule.scheduledEpochDay - today.toEpochDay()
-        val body = when {
+        val days = schedule.endEpochDay - today.toEpochDay()
+        val baseBody = when {
             days < 0 -> applicationContext.getString(R.string.notification_overdue, -days)
             days == 0L -> applicationContext.getString(R.string.notification_today)
             days == 1L -> applicationContext.getString(R.string.notification_tomorrow)
             else -> applicationContext.getString(R.string.notification_days, days)
+        }
+        val progress = scheduleWithSteps.progress
+        val body = buildString {
+            append(baseBody)
+            if (progress.hasSteps) {
+                append("\n")
+                append(applicationContext.getString(R.string.notification_progress, progress.completedCount, progress.totalCount))
+                scheduleWithSteps.orderedSteps.firstOrNull { !it.isCompleted }?.let {
+                    append("\n")
+                    append(applicationContext.getString(R.string.notification_next_step, it.title))
+                }
+            }
         }
         val intent = android.content.Intent(applicationContext, com.datenote.app.MainActivity::class.java)
             .putExtra(ReminderNotifications.SCHEDULE_ID, id)

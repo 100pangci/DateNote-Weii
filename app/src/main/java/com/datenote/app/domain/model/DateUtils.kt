@@ -13,10 +13,14 @@ fun monthGrid(month: YearMonth): List<LocalDate> {
 fun daysBetween(today: LocalDate, target: LocalDate): Long =
     target.toEpochDay() - today.toEpochDay()
 
+fun inclusiveDays(startEpochDay: Long, endEpochDay: Long): Long =
+    (endEpochDay - startEpochDay + 1).coerceAtLeast(0)
+
 fun isOverdue(schedule: ScheduleDateLike, today: LocalDate): Boolean =
-    schedule.status != ScheduleStatus.COMPLETED && schedule.scheduledEpochDay < today.toEpochDay()
+    schedule.status != ScheduleStatus.COMPLETED && schedule.endEpochDay < today.toEpochDay()
 
 interface ScheduleDateLike {
-    val scheduledEpochDay: Long
+    val startEpochDay: Long
+    val endEpochDay: Long
     val status: ScheduleStatus
 }

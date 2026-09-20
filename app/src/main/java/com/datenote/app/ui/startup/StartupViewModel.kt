@@ -5,7 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.datenote.app.data.repository.UserPreferences
 import com.datenote.app.data.repository.UserPreferencesRepository
-import com.datenote.app.data.local.ScheduleEntity
+import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
 import com.datenote.app.domain.model.ScheduleStatus
 import kotlinx.coroutines.flow.first
@@ -58,16 +58,30 @@ class StartupViewModel(
         }
     }
 
+    fun completeNotificationGuide() {
+        viewModelScope.launch { repository.setNotificationGuideCompleted() }
+    }
+
     fun loadStartupReminder() {
         if (reminderLoaded || _startupState.value != AppStartupState.Ready) return
         reminderLoaded = true
         if (_showWelcome.value) return
         _reminderState.value = StartupReminderState.Loading
         viewModelScope.launch {
-            runCatching { scheduleRepository.observeIncomplete().first() }
+            runCatching { scheduleRepository.observeAllWithSteps().first() }
                 .onSuccess { schedules ->
-                    _reminderState.value = if (schedules.any { it.status != ScheduleStatus.COMPLETED }) {
-                        StartupReminderState.Show(schedules.filter { it.status != ScheduleStatus.COMPLETED })
+                    val today = java.time.LocalDate.now().toEpochDay()
+                    val sorted = schedules.filter { it.schedule.status != ScheduleStatus.COMPLETED }
+                        .sortedWith(compareBy<ScheduleWithSteps> {
+                            when {
+                                it.schedule.endEpochDay < today -> 0
+                                it.schedule.endEpochDay == today -> 1
+                                it.schedule.startEpochDay <= today -> 2
+                                else -> 3
+                            }
+                        }.thenBy { it.schedule.endEpochDay })
+                    _reminderState.value = if (sorted.isNotEmpty()) {
+                        StartupReminderState.Show(sorted)
                     } else StartupReminderState.Hidden
                 }
                 .onFailure { _reminderState.value = StartupReminderState.Hidden }
@@ -89,5 +103,5 @@ class StartupViewModel(
 sealed interface StartupReminderState {
     data object Hidden : StartupReminderState
     data object Loading : StartupReminderState
-    data class Show(val schedules: List<ScheduleEntity>) : StartupReminderState
+    data class Show(val schedules: List<ScheduleWithSteps>) : StartupReminderState
 }

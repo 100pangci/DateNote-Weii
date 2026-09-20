@@ -52,6 +52,7 @@ fun MainShell(
     reminderScheduler: ReminderScheduler,
     initialScheduleId: Long?,
     showWelcome: Boolean,
+    onRequestNotifications: () -> Unit,
 ) {
     val navController = rememberNavController()
     val entry = navController.currentBackStackEntryAsState().value
@@ -93,7 +94,7 @@ fun MainShell(
                 )
             }
             composable(AllRoute) { AllSchedulesScreen(repository = repository, reminderScheduler = reminderScheduler, defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes, onEdit = { navController.navigate("schedule/$it") }) }
-            composable(AiRoute) { AiInputScreen(aiRepository = aiRepository, repository = repository, defaultReminderMinutes = preferences.defaultReminderMinutes, reminderScheduler = reminderScheduler, defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes) }
+            composable(AiRoute) { AiInputScreen(aiRepository = aiRepository, repository = repository, defaultReminderMinutes = preferences.defaultReminderMinutes, reminderScheduler = reminderScheduler, defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes, onRequestNotifications = onRequestNotifications) }
             composable(SettingsRoute) {
                 SettingsScreen(
                     preferencesRepository = preferencesRepository,
@@ -101,6 +102,7 @@ fun MainShell(
                     aiRepository = aiRepository,
                     scheduleRepository = repository,
                     reminderScheduler = reminderScheduler,
+                    onRequestNotifications = onRequestNotifications,
                 )
             }
             composable(AddRoute) {
@@ -112,6 +114,7 @@ fun MainShell(
                     defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes,
                     onBack = { navController.popBackStack() },
                     onSaved = { navController.popBackStack() },
+                    onRequestNotifications = onRequestNotifications,
                 )
             }
             composable(EditRoute, arguments = listOf(navArgument("id") { type = NavType.LongType })) { backStackEntry ->
@@ -123,6 +126,7 @@ fun MainShell(
                     defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes,
                     onBack = { navController.popBackStack() },
                     onSaved = { navController.popBackStack() },
+                    onRequestNotifications = onRequestNotifications,
                 )
             }
         }

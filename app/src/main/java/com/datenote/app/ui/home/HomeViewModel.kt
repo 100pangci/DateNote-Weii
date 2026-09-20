@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.datenote.app.data.local.ScheduleEntity
+import com.datenote.app.data.local.ScheduleStepEntity
+import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
 import com.datenote.app.domain.model.ScheduleStatus
 import com.datenote.app.reminder.ReminderScheduler
@@ -30,19 +32,22 @@ class HomeViewModel(
     val selectedDay: StateFlow<LocalDate> = selectedDate
     val month: StateFlow<YearMonth> = displayedMonth
 
-    val monthSchedules: StateFlow<List<ScheduleEntity>> = displayedMonth
+    val monthSchedules: StateFlow<List<ScheduleWithSteps>> = displayedMonth
         .flatMapLatest { value ->
-            repository.observeForMonth(
+            repository.observeForMonthWithSteps(
                 value.atDay(1).toEpochDay(),
                 value.atEndOfMonth().toEpochDay(),
             )
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val selectedSchedules: StateFlow<List<ScheduleEntity>> = combine(
+    val selectedSchedules: StateFlow<List<ScheduleWithSteps>> = combine(
         monthSchedules,
         selectedDate,
-    ) { schedules, date -> schedules.filter { it.scheduledEpochDay == date.toEpochDay() } }
+    ) { schedules, date ->
+        val epochDay = date.toEpochDay()
+        schedules.filter { it.schedule.startEpochDay <= epochDay && it.schedule.endEpochDay >= epochDay }
+    }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun selectDate(date: LocalDate) {
@@ -56,9 +61,9 @@ class HomeViewModel(
         selectedDate.value = next.atDay(selectedDate.value.dayOfMonth.coerceAtMost(next.lengthOfMonth()))
     }
 
-    fun insert(schedule: ScheduleEntity, onSaved: () -> Unit) {
+    fun insert(schedule: ScheduleEntity, steps: List<ScheduleStepEntity> = emptyList(), onSaved: () -> Unit) {
         viewModelScope.launch {
-            val id = repository.insert(schedule)
+            val id = repository.saveWithSteps(schedule, steps)
             reminderScheduler.sync(schedule.copy(id = id), defaultReminderTimeMinutes)
             onSaved()
         }
@@ -72,10 +77,10 @@ class HomeViewModel(
         }
     }
 
-    fun toggleCompleted(schedule: ScheduleEntity) {
-        val completed = schedule.status == ScheduleStatus.COMPLETED
+    fun toggleCompleted(schedule: ScheduleWithSteps, completeSteps: Boolean = false) {
+        val completed = schedule.schedule.status == ScheduleStatus.COMPLETED
         update(
-            schedule.copy(
+            schedule.schedule.copy(
                 status = if (completed) ScheduleStatus.TODO else ScheduleStatus.COMPLETED,
                 completedAt = if (completed) null else System.currentTimeMillis(),
                 updatedAt = System.currentTimeMillis(),
@@ -83,12 +88,26 @@ class HomeViewModel(
         )
     }
 
-    fun postpone(schedule: ScheduleEntity, days: Long) {
-        update(schedule.copy(scheduledEpochDay = schedule.scheduledEpochDay + days, updatedAt = System.currentTimeMillis()))
+    fun markCompleted(schedule: ScheduleWithSteps, completeSteps: Boolean) {
+        viewModelScope.launch {
+            val updated = repository.setStatus(schedule.schedule.id, ScheduleStatus.COMPLETED, completeSteps)
+            updated?.let { reminderScheduler.sync(it, defaultReminderTimeMinutes) }
+        }
     }
 
-    fun delete(schedule: ScheduleEntity) {
-        viewModelScope.launch { repository.delete(schedule); reminderScheduler.cancel(schedule.id) }
+    fun toggleStep(schedule: ScheduleWithSteps, step: ScheduleStepEntity) {
+        viewModelScope.launch {
+            val updated = repository.setStepCompleted(schedule.schedule.id, step.id, !step.isCompleted)
+            updated?.let { reminderScheduler.sync(it, defaultReminderTimeMinutes) }
+        }
+    }
+
+    fun postpone(schedule: ScheduleWithSteps, days: Long) {
+        update(schedule.schedule.copy(startEpochDay = schedule.schedule.startEpochDay + days, endEpochDay = schedule.schedule.endEpochDay + days, updatedAt = System.currentTimeMillis()))
+    }
+
+    fun delete(schedule: ScheduleWithSteps) {
+        viewModelScope.launch { repository.delete(schedule.schedule); reminderScheduler.cancel(schedule.schedule.id) }
     }
 
     class Factory(

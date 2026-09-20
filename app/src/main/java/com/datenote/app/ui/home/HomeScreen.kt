@@ -32,6 +32,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -55,11 +56,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.datenote.app.R
 import com.datenote.app.data.local.ScheduleEntity
+import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
 import com.datenote.app.reminder.ReminderScheduler
 import com.datenote.app.domain.model.ScheduleStatus
 import com.datenote.app.domain.model.isOverdue
 import com.datenote.app.domain.model.monthGrid
+import com.datenote.app.domain.model.progress
+import com.datenote.app.domain.model.inclusiveDays
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
@@ -79,7 +83,8 @@ fun HomeScreen(
     val selectedDate by viewModel.selectedDay.collectAsStateWithLifecycle()
     val monthSchedules by viewModel.monthSchedules.collectAsStateWithLifecycle()
     val selectedSchedules by viewModel.selectedSchedules.collectAsStateWithLifecycle()
-    var pendingDelete by remember { mutableStateOf<ScheduleEntity?>(null) }
+    var pendingDelete by remember { mutableStateOf<ScheduleWithSteps?>(null) }
+    var pendingComplete by remember { mutableStateOf<ScheduleWithSteps?>(null) }
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -117,11 +122,15 @@ fun HomeScreen(
             if (selectedSchedules.isEmpty()) {
                 item { EmptyDayState(isToday = selectedDate == LocalDate.now(), monthIsEmpty = monthSchedules.isEmpty()) }
             } else {
-                items(selectedSchedules, key = { it.id }) { schedule ->
+                items(selectedSchedules, key = { it.schedule.id }) { schedule ->
                     ScheduleCard(
                         schedule = schedule,
-                        onClick = { onEdit(schedule.id) },
-                        onToggleComplete = { viewModel.toggleCompleted(schedule) },
+                        onClick = { onEdit(schedule.schedule.id) },
+                        onToggleComplete = {
+                            if (schedule.schedule.status == ScheduleStatus.COMPLETED) viewModel.toggleCompleted(schedule)
+                            else if (schedule.progress.hasSteps && schedule.progress.completedCount < schedule.progress.totalCount) pendingComplete = schedule
+                            else viewModel.markCompleted(schedule, completeSteps = false)
+                        },
                         onPostpone = { viewModel.postpone(schedule, it) },
                         onDelete = { pendingDelete = schedule },
                     )
@@ -149,6 +158,15 @@ fun HomeScreen(
                     pendingDelete = null
                 }) { Text(stringResource(R.string.confirm_delete), color = MaterialTheme.colorScheme.error) }
             },
+        )
+    }
+    pendingComplete?.let { schedule ->
+        AlertDialog(
+            onDismissRequest = { pendingComplete = null },
+            title = { Text(stringResource(R.string.incomplete_steps_title)) },
+            text = { Text(stringResource(R.string.incomplete_steps_message)) },
+            dismissButton = { TextButton(onClick = { pendingComplete = null }) { Text(stringResource(R.string.check_again)) } },
+            confirmButton = { TextButton(onClick = { viewModel.markCompleted(schedule, true); pendingComplete = null }) { Text(stringResource(R.string.complete_all)) } },
         )
     }
 }
@@ -187,12 +205,16 @@ private fun WelcomeCard(nickname: String) {
 private fun CalendarCard(
     month: YearMonth,
     selectedDate: LocalDate,
-    schedules: List<ScheduleEntity>,
+    schedules: List<ScheduleWithSteps>,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onSelectDate: (LocalDate) -> Unit,
 ) {
-    val counts = remember(schedules) { schedules.groupingBy { it.scheduledEpochDay }.eachCount() }
+    val counts = remember(schedules) {
+        monthGrid(month).map { it.toEpochDay() }.associateWith { epochDay ->
+            schedules.count { it.schedule.startEpochDay <= epochDay && it.schedule.endEpochDay >= epochDay }
+        }
+    }
     val today = LocalDate.now()
     val weekdayLabels = listOf(
         R.string.monday, R.string.tuesday, R.string.wednesday, R.string.thursday,
@@ -222,7 +244,7 @@ private fun CalendarCard(
                             isSelected = date == selectedDate,
                             isToday = date == today,
                             count = count,
-                            schedules = schedules.filter { it.scheduledEpochDay == date.toEpochDay() },
+                            schedules = schedules.filter { it.schedule.startEpochDay <= date.toEpochDay() && it.schedule.endEpochDay >= date.toEpochDay() },
                             onClick = { onSelectDate(date) },
                         )
                     }
@@ -240,11 +262,11 @@ private fun CalendarDay(
     isSelected: Boolean,
     isToday: Boolean,
     count: Int,
-    schedules: List<ScheduleEntity>,
+    schedules: List<ScheduleWithSteps>,
     onClick: () -> Unit,
 ) {
-    val hasOverdue = schedules.any { isOverdue(it, LocalDate.now()) }
-    val hasCompleted = schedules.all { it.status == ScheduleStatus.COMPLETED }
+    val hasOverdue = schedules.any { isOverdue(it.schedule, LocalDate.now()) }
+    val hasCompleted = schedules.all { it.schedule.status == ScheduleStatus.COMPLETED }
     val dotColor = when {
         hasOverdue -> MaterialTheme.colorScheme.error
         hasCompleted && count > 0 -> Color(0xFF5B8C5A)
@@ -288,7 +310,7 @@ private fun EmptyDayState(isToday: Boolean, monthIsEmpty: Boolean) {
 
 @Composable
 private fun ScheduleCard(
-    schedule: ScheduleEntity,
+    schedule: ScheduleWithSteps,
     onClick: () -> Unit,
     onToggleComplete: () -> Unit,
     onPostpone: (Long) -> Unit,
@@ -296,8 +318,9 @@ private fun ScheduleCard(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val today = LocalDate.now()
-    val overdue = isOverdue(schedule, today)
-    val completed = schedule.status == ScheduleStatus.COMPLETED
+    val entity = schedule.schedule
+    val overdue = isOverdue(entity, today)
+    val completed = entity.status == ScheduleStatus.COMPLETED
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
@@ -308,16 +331,24 @@ private fun ScheduleCard(
         Row(Modifier.fillMaxWidth().padding(start = 8.dp, top = 12.dp, bottom = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = completed, onCheckedChange = { onToggleComplete() })
             Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
-                Text(schedule.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(entity.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(dateSummary(entity), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 val detail = buildString {
-                    schedule.minuteOfDay?.let { append(String.format("%02d:%02d", it / 60, it % 60)) }
-                    if (schedule.minuteOfDay != null && schedule.category != null) append(" · ")
-                    schedule.category?.let(::append)
+                    entity.minuteOfDay?.let { append(String.format("%02d:%02d", it / 60, it % 60)) }
+                    if (entity.minuteOfDay != null && entity.category != null) append(" · ")
+                    entity.category?.let(::append)
                 }
                 if (detail.isNotBlank()) Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (schedule.note.isNotBlank()) Text(schedule.note, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (overdue) Text(stringResource(R.string.schedule_overdue), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
-                if (schedule.remindBeforeMinutes != null) Text(stringResource(R.string.reminder_enabled), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+                if (entity.note.isNotBlank()) Text(entity.note, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(scheduleProgressText(schedule), color = if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+                if (schedule.progress.hasSteps) {
+                    Text(stringResource(R.string.progress_completed, schedule.progress.completedCount, schedule.progress.totalCount), style = MaterialTheme.typography.labelMedium)
+                    LinearProgressIndicator(progress = { schedule.progress.fraction }, modifier = Modifier.fillMaxWidth())
+                    schedule.orderedSteps.firstOrNull { !it.isCompleted }?.let { next ->
+                        Text(stringResource(R.string.next_step, next.title), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+                if (entity.remindBeforeMinutes != null) Text(stringResource(R.string.reminder_enabled), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
             }
             Box {
                 IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Default.MoreVert, stringResource(R.string.schedule_more)) }
@@ -332,5 +363,24 @@ private fun ScheduleCard(
                 }
             }
         }
+    }
+}
+
+private fun dateSummary(schedule: ScheduleEntity): String {
+    val start = LocalDate.ofEpochDay(schedule.startEpochDay)
+    val end = LocalDate.ofEpochDay(schedule.endEpochDay)
+    return if (start == end) "${start.monthValue}月${start.dayOfMonth}日"
+    else "${start.monthValue}月${start.dayOfMonth}日～${end.monthValue}月${end.dayOfMonth}日 · 共 ${inclusiveDays(schedule.startEpochDay, schedule.endEpochDay)} 天"
+}
+
+@Composable
+private fun scheduleProgressText(schedule: ScheduleWithSteps): String {
+    if (schedule.schedule.status == ScheduleStatus.COMPLETED) return stringResource(R.string.schedule_done)
+    val today = LocalDate.now().toEpochDay()
+    return when {
+        today < schedule.schedule.startEpochDay -> stringResource(R.string.days_to_start, schedule.schedule.startEpochDay - today)
+        today == schedule.schedule.endEpochDay -> stringResource(R.string.today_due)
+        today > schedule.schedule.endEpochDay -> stringResource(R.string.days_overdue, today - schedule.schedule.endEpochDay)
+        else -> stringResource(R.string.in_progress_remaining, schedule.schedule.endEpochDay - today)
     }
 }

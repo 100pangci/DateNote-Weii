@@ -19,12 +19,21 @@ class AiResponseParser(
                 warnings += "有一条安排没有标题"
                 return@mapNotNull null
             }
-            val date = runCatching { LocalDate.parse(item.date) }.getOrNull()
-            if (date == null) {
+            val startText = item.startDate?.takeIf { it.isNotBlank() } ?: item.date?.takeIf { it.isNotBlank() }
+            val endText = item.endDate?.takeIf { it.isNotBlank() } ?: startText
+            val parsedStart = startText?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            val parsedEnd = endText?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            val startDate = parsedStart ?: parsedEnd
+            val endDate = parsedEnd ?: parsedStart
+            if (startDate == null || endDate == null) {
                 warnings += "“$title”的日期没有看清"
                 return@mapNotNull null
             }
-            if (date.isBefore(today.minusYears(10)) || date.isAfter(today.plusYears(10))) {
+            if (endDate.isBefore(startDate)) {
+                warnings += "“$title”的结束日期早于开始日期"
+                return@mapNotNull null
+            }
+            if (startDate.isBefore(today.minusYears(10)) || endDate.isAfter(today.plusYears(10))) {
                 warnings += "“$title”的日期看起来不太合理"
                 return@mapNotNull null
             }
@@ -34,18 +43,27 @@ class AiResponseParser(
             }
             val reminder = item.remindBeforeMinutes?.takeIf { it in 0..43_200 }
             if (item.remindBeforeMinutes != null && reminder == null) warnings += "“$title”的提醒时间已暂不采用"
+            val uncertainties = item.uncertainties.map(String::trim).filter(String::isNotEmpty).toMutableList()
+            if (item.startDate.isNullOrBlank() && item.endDate?.isNotBlank() == true && item.date.isNullOrBlank()) {
+                uncertainties += "未提供开始日期，请确认"
+            }
+            val steps = item.steps.mapNotNull { step ->
+                step.title.trim().takeIf { it.isNotEmpty() }?.let { ParsedStep(it, step.isCompleted) }
+            }
             ParsedSchedule(
                 title = title,
-                date = date,
+                startDate = startDate,
+                endDate = endDate,
                 time = time,
                 category = item.category?.trim()?.takeIf { it.isNotEmpty() },
                 note = item.note.trim(),
                 remindBeforeMinutes = reminder,
+                steps = steps,
                 confidence = item.confidence.coerceIn(0.0, 1.0),
-                uncertainties = item.uncertainties.map(String::trim).filter(String::isNotEmpty),
+                uncertainties = uncertainties.distinct(),
             )
         }
-        items.groupBy { Triple(it.title, it.date, it.time) }.filterValues { it.size > 1 }.keys.forEach {
+        items.groupBy { Triple(it.title, it.startDate, it.time) }.filterValues { it.size > 1 }.keys.forEach {
             warnings += "发现了可能重复的安排：${it.first}"
         }
         if (items.isEmpty() && warnings.isEmpty()) throw AiParseException("empty response")

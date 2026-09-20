@@ -32,11 +32,21 @@ data class AiResponseDto(
 @Serializable
 data class AiItemDto(
     val title: String = "",
-    val date: String = "",
+    val startDate: String? = null,
+    val endDate: String? = null,
+    // Kept only so an older configured model response remains readable during development.
+    val date: String? = null,
     val time: String? = null,
     val category: String? = null,
     val note: String = "",
     val remindBeforeMinutes: Long? = null,
+    val steps: List<AiStepDto> = emptyList(),
     val confidence: Double = 0.0,
     val uncertainties: List<String> = emptyList(),
+)
+
+@Serializable
+data class AiStepDto(
+    val title: String = "",
+    val isCompleted: Boolean = false,
 )
