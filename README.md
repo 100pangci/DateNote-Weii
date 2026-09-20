@@ -59,6 +59,7 @@
 
 - 推送到 `main` 会自动执行单元测试、Lint 和 Debug 构建，并上传 Debug APK artifact。
 - 推送形如 `v0.1.0` 的 Tag 会自动构建 Release APK，并使用 `CHANGELOG.md` 创建 GitHub Release。
+- Release Tag 会同步应用版本号：例如 `v1.2.3` 会生成应用内 `1.2.3`，并自动计算对应的 Android `versionCode`。
 - 如需让 GitHub Actions 生成签名 APK，请在仓库 Secrets 中配置 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS` 和 `ANDROID_KEY_PASSWORD`。未配置时仍会生成 Release 构建产物，但不会使用正式签名。
 
 命令行构建 Debug APK：

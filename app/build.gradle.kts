@@ -4,6 +4,17 @@ import java.util.Locale
 import java.util.Properties
 
 val weiiBuildEnabled = providers.gradleProperty("weii").isPresent
+val configuredVersionName = providers.gradleProperty("versionName").orNull
+    ?.trim()
+    ?.removePrefix("v")
+    ?.takeIf { it.isNotEmpty() }
+    ?: "0.1.0"
+val configuredVersionCode = providers.gradleProperty("versionCode").orNull
+    ?.trim()
+    ?.toIntOrNull()
+    ?: 1
+
+require(configuredVersionCode > 0) { "versionCode must be a positive integer" }
 
 fun loadDotEnv(file: File): Map<String, String> {
     if (!file.isFile) return emptyMap()
@@ -70,8 +81,8 @@ android {
         applicationId = "com.datenote.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = configuredVersionCode
+        versionName = configuredVersionName
 
         buildConfigField("boolean", "WEII_PRECONFIGURED", weiiBuildEnabled.toString())
         buildConfigField("String", "WEII_AI_BASE_URL", buildConfigString(weiiBaseUrl))

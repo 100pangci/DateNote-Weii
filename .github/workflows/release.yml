@@ -53,8 +53,31 @@ jobs:
           keyPassword=$ANDROID_KEY_PASSWORD
           EOF
 
+      - name: Derive Android version from tag
+        id: version
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          version="${TAG_NAME#v}"
+          base_version="${version%%-*}"
+          if [[ ! "$base_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag must use semantic versioning, for example v1.2.3"
+            exit 1
+          fi
+          IFS='.' read -r major minor patch <<< "$base_version"
+          version_code=$((major * 1000000 + minor * 1000 + patch))
+          if (( version_code <= 0 )); then
+            echo "Derived versionCode must be positive"
+            exit 1
+          fi
+          echo "name=$version" >> "$GITHUB_OUTPUT"
+          echo "code=$version_code" >> "$GITHUB_OUTPUT"
+
       - name: Build release APK
-        run: ./gradlew assembleRelease
+        env:
+          RELEASE_VERSION_NAME: ${{ steps.version.outputs.name }}
+          RELEASE_VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: ./gradlew -PversionName="$RELEASE_VERSION_NAME" -PversionCode="$RELEASE_VERSION_CODE" assembleRelease
 
       - name: Prepare release asset
         run: cp app/build/outputs/apk/release/app-release.apk "维来可期-${GITHUB_REF_NAME}.apk"
