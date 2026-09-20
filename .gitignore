@@ -1,0 +1,24 @@
+# Local Gradle user home and downloaded dependencies.
+.gradle/
+
+# Android Studio / local machine files.
+.idea/
+local.properties
+*.iml
+
+# Build outputs.
+build/
+*/build/
+
+# Local test/device files.
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Secrets and release artifacts.
+*.jks
+*.keystore
+*.p12
+*.apk
+*.aab
+*.hprof
