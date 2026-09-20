@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.datenote.app.data.local.ScheduleEntity
 import com.datenote.app.data.local.ScheduleStepEntity
+import com.datenote.app.data.local.ScheduleTypeWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
 import com.datenote.app.domain.model.ScheduleStatus
 import com.datenote.app.reminder.ReminderScheduler
@@ -12,12 +13,14 @@ import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 data class EditorState(
     val isLoading: Boolean = true,
     val schedule: ScheduleEntity? = null,
     val steps: List<ScheduleStepEntity> = emptyList(),
+    val scheduleTypes: List<ScheduleTypeWithSteps> = emptyList(),
 )
 
 class ScheduleEditorViewModel(
@@ -41,7 +44,18 @@ class ScheduleEditorViewModel(
             )
             _state.value = EditorState(isLoading = false, schedule = schedule, steps = loaded?.orderedSteps.orEmpty())
         }
+        viewModelScope.launch {
+            repository.observeScheduleTypes().collect { types ->
+                _state.value = _state.value.copy(scheduleTypes = types)
+            }
+        }
     }
+
+    fun typeByName(name: String): ScheduleTypeWithSteps? =
+        _state.value.scheduleTypes.firstOrNull { it.type.name == name.trim() }
+
+    fun stepsFromType(type: ScheduleTypeWithSteps, scheduleId: Long): List<ScheduleStepEntity> =
+        type.toScheduleSteps(scheduleId)
 
     fun save(schedule: ScheduleEntity, steps: List<ScheduleStepEntity>, onSaved: () -> Unit) {
         viewModelScope.launch {

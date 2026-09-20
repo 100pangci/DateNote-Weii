@@ -17,12 +17,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,6 +55,7 @@ import com.datenote.app.R
 import com.datenote.app.data.local.ScheduleEntity
 import com.datenote.app.data.local.ScheduleStepEntity
 import com.datenote.app.data.local.ScheduleWithSteps
+import com.datenote.app.data.local.ScheduleTypeWithSteps
 import com.datenote.app.data.remote.AiRepository
 import com.datenote.app.data.repository.ScheduleRepository
 import com.datenote.app.reminder.ReminderScheduler
@@ -93,7 +97,9 @@ fun AiInputScreen(
     val viewModel: AiInputViewModel = viewModel(factory = AiInputViewModel.Factory(aiRepository, repository, reminderScheduler, defaultReminderTimeMinutes))
     val state by viewModel.state.collectAsStateWithLifecycle()
     var drafts by remember(state.result) {
-        mutableStateOf(state.result?.items.orEmpty().mapIndexed { index, item -> item.toEditable(defaultReminderMinutes, index.toLong()) })
+        mutableStateOf(state.result?.items.orEmpty().mapIndexed { index, item ->
+            item.toEditable(defaultReminderMinutes, index.toLong(), state.matchedTemplateSteps[index].orEmpty())
+        })
     }
     var saveError by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
@@ -105,6 +111,7 @@ fun AiInputScreen(
     } else {
         ReviewPage(
             drafts = drafts,
+            scheduleTypes = state.scheduleTypes,
             warnings = state.result?.warnings.orEmpty(),
             saving = saving,
             saveError = saveError,
@@ -205,6 +212,7 @@ private fun ErrorMessage(error: AiInputError) {
 @Composable
 private fun ReviewPage(
     drafts: List<EditableAiDraft>,
+    scheduleTypes: List<ScheduleTypeWithSteps>,
     warnings: List<String>,
     saving: Boolean,
     saveError: Boolean,
@@ -229,7 +237,7 @@ private fun ReviewPage(
             }
         }
         itemsIndexed(drafts, key = { _, draft -> draft.id }) { index, draft ->
-            DraftCard(draft, onChange = { onDraftChange(index, it) }, onRemove = { onRemove(index) })
+            DraftCard(draft, scheduleTypes, onChange = { onDraftChange(index, it) }, onRemove = { onRemove(index) })
         }
         if (saveError) item { Text(stringResource(R.string.ai_invalid_draft), color = MaterialTheme.colorScheme.error) }
         item {
@@ -253,61 +261,135 @@ private fun ReviewPage(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DraftCard(draft: EditableAiDraft, onChange: (EditableAiDraft) -> Unit, onRemove: () -> Unit) {
+private fun DraftCard(
+    draft: EditableAiDraft,
+    scheduleTypes: List<ScheduleTypeWithSteps>,
+    onChange: (EditableAiDraft) -> Unit,
+    onRemove: () -> Unit,
+) {
     var datePickerTarget by rememberSaveable(draft.id) { mutableStateOf<AiDateTarget?>(null) }
+    var expanded by rememberSaveable(draft.id) { mutableStateOf(true) }
+    var typeMenuVisible by remember { mutableStateOf(false) }
+    var pendingType by remember { mutableStateOf<ScheduleTypeWithSteps?>(null) }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(draft.title, { onChange(draft.copy(title = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.schedule_title_label)) })
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AiDateButton(
-                    label = stringResource(R.string.schedule_start_label),
-                    date = draft.startDate.toLocalDateOrNull() ?: LocalDate.now(),
-                    modifier = Modifier.weight(1f),
-                    onClick = { datePickerTarget = AiDateTarget.START },
-                )
-                AiDateButton(
-                    label = stringResource(R.string.schedule_end_label),
-                    date = draft.endDate.toLocalDateOrNull() ?: draft.startDate.toLocalDateOrNull() ?: LocalDate.now(),
-                    modifier = Modifier.weight(1f),
-                    onClick = { datePickerTarget = AiDateTarget.END },
-                )
-            }
-            OutlinedTextField(
-                draft.time,
-                { onChange(draft.copy(time = it)) },
-                Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.ai_time)) },
-                singleLine = true,
-            )
-            OutlinedTextField(draft.category, { onChange(draft.copy(category = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.ai_category)) }, singleLine = true)
-            OutlinedTextField(draft.note, { onChange(draft.copy(note = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.ai_note)) }, minLines = 2)
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.schedule_reminder_label), Modifier.weight(1f))
-                Switch(draft.reminderEnabled, { onChange(draft.copy(reminderEnabled = it)) })
-            }
-            if (draft.reminderEnabled) OutlinedTextField(draft.reminder, { onChange(draft.copy(reminder = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.ai_reminder_minutes)) }, singleLine = true)
-            Text(stringResource(R.string.production_steps), style = MaterialTheme.typography.titleSmall)
-            draft.steps.forEachIndexed { stepIndex, step ->
+            if (expanded) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(step.isCompleted, { checked -> onChange(draft.copy(steps = draft.steps.mapIndexed { index, old -> if (index == stepIndex) old.copy(isCompleted = checked) else old })) })
-                    OutlinedTextField(step.title, { value -> onChange(draft.copy(steps = draft.steps.mapIndexed { index, old -> if (index == stepIndex) old.copy(title = value) else old })) }, Modifier.weight(1f), label = { Text(stringResource(R.string.step_name)) }, singleLine = true)
-                     IconButton(enabled = stepIndex > 0, onClick = {
-                         val reordered = draft.steps.toMutableList(); val previous = reordered[stepIndex - 1]; reordered[stepIndex - 1] = reordered[stepIndex]; reordered[stepIndex] = previous; onChange(draft.copy(steps = reordered))
-                     }) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = stringResource(R.string.move_step_up)) }
-                     IconButton(enabled = stepIndex < draft.steps.lastIndex, onClick = {
-                         val reordered = draft.steps.toMutableList(); val next = reordered[stepIndex + 1]; reordered[stepIndex + 1] = reordered[stepIndex]; reordered[stepIndex] = next; onChange(draft.copy(steps = reordered))
-                     }) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.move_step_down)) }
-                    TextButton(onClick = { onChange(draft.copy(steps = draft.steps.filterIndexed { index, _ -> index != stepIndex })) }) { Text(stringResource(R.string.delete_step)) }
+                    OutlinedTextField(
+                        draft.title,
+                        { onChange(draft.copy(title = it)) },
+                        Modifier.weight(1f),
+                        label = { Text(stringResource(R.string.schedule_title_label)) },
+                    )
+                    IconButton(onClick = { expanded = false }) {
+                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = stringResource(R.string.collapse_draft))
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AiDateButton(
+                        label = stringResource(R.string.schedule_start_label),
+                        date = draft.startDate.toLocalDateOrNull() ?: LocalDate.now(),
+                        modifier = Modifier.weight(1f),
+                        onClick = { datePickerTarget = AiDateTarget.START },
+                    )
+                    AiDateButton(
+                        label = stringResource(R.string.schedule_end_label),
+                        date = draft.endDate.toLocalDateOrNull() ?: draft.startDate.toLocalDateOrNull() ?: LocalDate.now(),
+                        modifier = Modifier.weight(1f),
+                        onClick = { datePickerTarget = AiDateTarget.END },
+                    )
+                }
+                OutlinedTextField(
+                    draft.time,
+                    { onChange(draft.copy(time = it)) },
+                    Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.ai_time)) },
+                    singleLine = true,
+                )
+                androidx.compose.foundation.layout.Box {
+                    OutlinedTextField(
+                        draft.category,
+                        { onChange(draft.copy(category = it)) },
+                        Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.ai_category)) },
+                        supportingText = { Text(stringResource(R.string.schedule_category_supporting)) },
+                        trailingIcon = {
+                            IconButton(onClick = { typeMenuVisible = true }) {
+                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.choose_schedule_type))
+                            }
+                        },
+                        singleLine = true,
+                    )
+                    DropdownMenu(
+                        expanded = typeMenuVisible,
+                        onDismissRequest = { typeMenuVisible = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.no_schedule_type)) },
+                            onClick = {
+                                typeMenuVisible = false
+                                onChange(draft.copy(category = ""))
+                            },
+                        )
+                        scheduleTypes.forEach { type ->
+                            DropdownMenuItem(
+                                text = { Text(type.type.name, maxLines = 1) },
+                                onClick = {
+                                    typeMenuVisible = false
+                                    if (draft.category.trim() != type.type.name) {
+                                        if (draft.steps.isNotEmpty() && type.orderedSteps.isNotEmpty()) pendingType = type
+                                        else onChange(
+                                            draft.copy(
+                                                category = type.type.name,
+                                                steps = if (draft.steps.isEmpty()) type.toScheduleSteps(0).map { EditableAiStep(it.position.toLong(), it.title, false) } else draft.steps,
+                                            ),
+                                        )
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(draft.note, { onChange(draft.copy(note = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.ai_note)) }, minLines = 2)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.schedule_reminder_label), Modifier.weight(1f))
+                    Switch(draft.reminderEnabled, { onChange(draft.copy(reminderEnabled = it)) })
+                }
+                if (draft.reminderEnabled) OutlinedTextField(draft.reminder, { onChange(draft.copy(reminder = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.ai_reminder_minutes)) }, singleLine = true)
+                Text(stringResource(R.string.production_steps), style = MaterialTheme.typography.titleSmall)
+                draft.steps.forEachIndexed { stepIndex, step ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(step.isCompleted, { checked -> onChange(draft.copy(steps = draft.steps.mapIndexed { index, old -> if (index == stepIndex) old.copy(isCompleted = checked) else old })) })
+                        OutlinedTextField(step.title, { value -> onChange(draft.copy(steps = draft.steps.mapIndexed { index, old -> if (index == stepIndex) old.copy(title = value) else old })) }, Modifier.weight(1f), label = { Text(stringResource(R.string.step_name)) }, singleLine = true)
+                         IconButton(enabled = stepIndex > 0, onClick = {
+                             val reordered = draft.steps.toMutableList(); val previous = reordered[stepIndex - 1]; reordered[stepIndex - 1] = reordered[stepIndex]; reordered[stepIndex] = previous; onChange(draft.copy(steps = reordered))
+                         }) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = stringResource(R.string.move_step_up)) }
+                         IconButton(enabled = stepIndex < draft.steps.lastIndex, onClick = {
+                             val reordered = draft.steps.toMutableList(); val next = reordered[stepIndex + 1]; reordered[stepIndex + 1] = reordered[stepIndex]; reordered[stepIndex] = next; onChange(draft.copy(steps = reordered))
+                         }) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.move_step_down)) }
+                         TextButton(onClick = { onChange(draft.copy(steps = draft.steps.filterIndexed { index, _ -> index != stepIndex })) }) { Text(stringResource(R.string.delete_step)) }
+                    }
+                }
+                TextButton(onClick = { onChange(draft.copy(steps = draft.steps + EditableAiStep(System.nanoTime(), "", false))) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.add_step)) }
+                Text(stringResource(R.string.ai_confidence, (draft.confidence * 100).toInt()), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
+                if (draft.uncertainties.isNotEmpty()) {
+                    Text(stringResource(R.string.ai_uncertain_title), color = MaterialTheme.colorScheme.error)
+                    Text(draft.uncertainties.joinToString("\n"), color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.ai_uncertain_message), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                TextButton(onClick = onRemove, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.ai_remove_item)) }
+            } else {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        draft.title.ifBlank { stringResource(R.string.unnamed_draft) },
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    IconButton(onClick = { expanded = true }) {
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.expand_draft))
+                    }
                 }
             }
-            TextButton(onClick = { onChange(draft.copy(steps = draft.steps + EditableAiStep(System.nanoTime(), "", false))) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.add_step)) }
-            Text(stringResource(R.string.ai_confidence, (draft.confidence * 100).toInt()), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
-            if (draft.uncertainties.isNotEmpty()) {
-                Text(stringResource(R.string.ai_uncertain_title), color = MaterialTheme.colorScheme.error)
-                Text(draft.uncertainties.joinToString("\n"), color = MaterialTheme.colorScheme.error)
-                Text(stringResource(R.string.ai_uncertain_message), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            TextButton(onClick = onRemove, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.ai_remove_item)) }
         }
     }
     datePickerTarget?.let { target ->
@@ -344,6 +426,39 @@ private fun DraftCard(draft: EditableAiDraft, onChange: (EditableAiDraft) -> Uni
             dismissButton = { TextButton(onClick = { datePickerTarget = null }) { Text(stringResource(R.string.cancel)) } },
         ) { DatePicker(state = pickerState) }
     }
+    pendingType?.let { type ->
+        val hasCompletedSteps = draft.steps.any { it.isCompleted }
+        AlertDialog(
+            onDismissRequest = { pendingType = null },
+            title = { Text(stringResource(R.string.apply_schedule_type_title, type.type.name)) },
+            text = {
+                Text(
+                    if (hasCompletedSteps) stringResource(R.string.apply_schedule_type_completed_message)
+                    else stringResource(R.string.apply_schedule_type_message),
+                )
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { pendingType = null }) { Text(stringResource(R.string.cancel)) }
+                    TextButton(onClick = {
+                        pendingType = null
+                        onChange(draft.copy(category = type.type.name))
+                    }) { Text(stringResource(R.string.only_change_schedule_type)) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingType = null
+                    onChange(
+                        draft.copy(
+                            category = type.type.name,
+                            steps = type.toScheduleSteps(0).map { EditableAiStep(it.position.toLong(), it.title, false) },
+                        ),
+                    )
+                }) { Text(stringResource(R.string.replace_steps_with_template)) }
+            },
+        )
+    }
 }
 
 @Composable
@@ -365,7 +480,7 @@ private enum class AiDateTarget { START, END }
 
 private fun String.toLocalDateOrNull(): LocalDate? = runCatching { LocalDate.parse(trim()) }.getOrNull()
 
-private fun ParsedSchedule.toEditable(defaultReminder: Int, id: Long): EditableAiDraft = EditableAiDraft(
+private fun ParsedSchedule.toEditable(defaultReminder: Int, id: Long, templateSteps: List<String>): EditableAiDraft = EditableAiDraft(
     id = id,
     title = title,
     startDate = startDate.toString(),
@@ -375,7 +490,8 @@ private fun ParsedSchedule.toEditable(defaultReminder: Int, id: Long): EditableA
     note = note,
     reminder = (remindBeforeMinutes ?: defaultReminder.toLong()).toString(),
     reminderEnabled = remindBeforeMinutes != null,
-    steps = steps.mapIndexed { index, step -> EditableAiStep(index.toLong(), step.title, step.isCompleted) },
+    steps = if (steps.isEmpty()) templateSteps.mapIndexed { index, title -> EditableAiStep(index.toLong(), title, false) }
+    else steps.mapIndexed { index, step -> EditableAiStep(index.toLong(), step.title, step.isCompleted) },
     confidence = confidence,
     uncertainties = uncertainties,
 )

@@ -49,6 +49,8 @@ import com.datenote.app.ui.settings.SettingsDestination
 import com.datenote.app.ui.settings.SettingsPersonalizationScreen
 import com.datenote.app.ui.settings.SettingsRemindersScreen
 import com.datenote.app.ui.settings.SettingsReliabilityScreen
+import com.datenote.app.ui.settings.ScheduleTypeEditorScreen
+import com.datenote.app.ui.settings.ScheduleTypesScreen
 
 private const val HomeRoute = "home"
 private const val AllRoute = "all"
@@ -133,12 +135,13 @@ fun MainShell(
                     repository = repository,
                     reminderScheduler = reminderScheduler,
                     defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes,
+                    defaultExpandSteps = preferences.defaultExpandSteps,
                     showWelcome = showWelcome,
                     onAdd = { navController.navigate(AddRoute) },
                     onEdit = { navController.navigate("schedule/$it") },
                 )
             }
-            composable(AllRoute, enterTransition = topLevelEnter, exitTransition = topLevelExit) { AllSchedulesScreen(repository = repository, reminderScheduler = reminderScheduler, defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes, onEdit = { navController.navigate("schedule/$it") }) }
+            composable(AllRoute, enterTransition = topLevelEnter, exitTransition = topLevelExit) { AllSchedulesScreen(repository = repository, reminderScheduler = reminderScheduler, defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes, defaultExpandSteps = preferences.defaultExpandSteps, onEdit = { navController.navigate("schedule/$it") }) }
             composable(AiRoute, enterTransition = topLevelEnter, exitTransition = topLevelExit) { AiInputScreen(aiRepository = aiRepository, repository = repository, defaultReminderMinutes = preferences.defaultReminderMinutes, reminderScheduler = reminderScheduler, defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes, onRequestNotifications = onRequestNotifications) }
             composable(SettingsRoute, enterTransition = topLevelEnter, exitTransition = topLevelExit) {
                 SettingsScreen(
@@ -153,6 +156,25 @@ fun MainShell(
             }
             composable(SettingsDestination.PERSONALIZATION, enterTransition = detailEnter, exitTransition = detailExit, popEnterTransition = detailPopEnter, popExitTransition = detailPopExit) {
                 SettingsPersonalizationScreen(preferencesRepository, keyStore, aiRepository, repository, reminderScheduler, navController::popBackStack)
+            }
+            composable(SettingsDestination.SCHEDULE_TYPES, enterTransition = detailEnter, exitTransition = detailExit, popEnterTransition = detailPopEnter, popExitTransition = detailPopExit) {
+                ScheduleTypesScreen(
+                    repository = repository,
+                    onBack = navController::popBackStack,
+                    onAdd = { navController.navigate(SettingsDestination.NEW_SCHEDULE_TYPE) },
+                    onEdit = { id -> navController.navigate("settings/schedule-types/$id") },
+                )
+            }
+            composable(SettingsDestination.NEW_SCHEDULE_TYPE, enterTransition = detailEnter, exitTransition = detailExit, popEnterTransition = detailPopEnter, popExitTransition = detailPopExit) {
+                ScheduleTypeEditorScreen(repository, null, navController::popBackStack, navController::popBackStack)
+            }
+            composable(SettingsDestination.EDIT_SCHEDULE_TYPE, arguments = listOf(navArgument("id") { type = NavType.LongType }), enterTransition = detailEnter, exitTransition = detailExit, popEnterTransition = detailPopEnter, popExitTransition = detailPopExit) { backStackEntry ->
+                ScheduleTypeEditorScreen(
+                    repository = repository,
+                    typeId = backStackEntry.arguments?.getLong("id"),
+                    onBack = navController::popBackStack,
+                    onSaved = navController::popBackStack,
+                )
             }
             composable(SettingsDestination.AI, enterTransition = detailEnter, exitTransition = detailExit, popEnterTransition = detailPopEnter, popExitTransition = detailPopExit) {
                 SettingsAiScreen(preferencesRepository, keyStore, aiRepository, repository, reminderScheduler, navController::popBackStack)

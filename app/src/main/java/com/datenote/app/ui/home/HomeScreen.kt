@@ -71,6 +71,7 @@ fun HomeScreen(
     repository: ScheduleRepository,
     reminderScheduler: ReminderScheduler,
     defaultReminderTimeMinutes: Int,
+    defaultExpandSteps: Boolean,
     showWelcome: Boolean,
     onAdd: () -> Unit,
     onEdit: (Long) -> Unit,
@@ -128,6 +129,7 @@ fun HomeScreen(
                 items(selectedSchedules, key = { it.schedule.id }) { schedule ->
                     ExpandableScheduleCard(
                         schedule = schedule,
+                        defaultExpandSteps = defaultExpandSteps,
                         onEdit = { onEdit(schedule.schedule.id) },
                         onToggleCompleted = {
                             if (schedule.schedule.status == ScheduleStatus.COMPLETED) {

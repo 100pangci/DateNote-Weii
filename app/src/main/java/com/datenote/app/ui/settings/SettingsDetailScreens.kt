@@ -67,10 +67,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.datenote.app.BuildConfig
 import com.datenote.app.R
 import com.datenote.app.data.backup.BackupDocument
-import com.datenote.app.data.backup.BackupSchedule
+import com.datenote.app.data.backup.BackupData
 import com.datenote.app.data.backup.toBackup
-import com.datenote.app.data.backup.toScheduleWithSteps
-import com.datenote.app.data.local.ScheduleWithSteps
+import com.datenote.app.data.backup.toBackupData
 import com.datenote.app.data.remote.AiRepository
 import com.datenote.app.data.repository.ScheduleRepository
 import com.datenote.app.data.repository.ThemeMode
@@ -142,6 +141,27 @@ fun SettingsPersonalizationScreen(
                     headlineContent = { Text(stringResource(R.string.dynamic_color)) },
                     supportingContent = { Text(stringResource(R.string.dynamic_color_support)) },
                     trailingContent = { Switch(checked = state.preferences.dynamicColor, onCheckedChange = viewModel::setDynamicColor) },
+                )
+            }
+            item { HorizontalDivider() }
+            item {
+                Text(
+                    stringResource(R.string.settings_schedule_cards),
+                    Modifier.padding(start = 16.dp, top = 18.dp, bottom = 8.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+            item {
+                ListItem(
+                    modifier = Modifier.clickable { viewModel.setDefaultExpandSteps(!state.preferences.defaultExpandSteps) },
+                    headlineContent = { Text(stringResource(R.string.default_expand_steps)) },
+                    supportingContent = { Text(stringResource(R.string.default_expand_steps_support)) },
+                    trailingContent = {
+                        Switch(
+                            checked = state.preferences.defaultExpandSteps,
+                            onCheckedChange = viewModel::setDefaultExpandSteps,
+                        )
+                    },
                 )
             }
         }
@@ -388,7 +408,7 @@ fun SettingsDataScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var feedback by remember { mutableStateOf<String?>(null) }
-    var pendingImport by remember { mutableStateOf<List<ScheduleWithSteps>?>(null) }
+    var pendingImport by remember { mutableStateOf<BackupData?>(null) }
     var replaceDialog by remember { mutableStateOf(false) }
     var clearDialog by remember { mutableStateOf(false) }
     val backupJson = remember { Json { prettyPrint = true; ignoreUnknownKeys = true } }
@@ -399,8 +419,15 @@ fun SettingsDataScreen(
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) scope.launch {
             val success = runCatching {
-                val schedules = withContext(Dispatchers.IO) { scheduleRepository.observeAllWithSteps().first() }
-                val document = BackupDocument(exportedAt = System.currentTimeMillis(), schedules = schedules.map { it.toBackup() })
+                val document = withContext(Dispatchers.IO) {
+                    val schedules = scheduleRepository.observeAllWithSteps().first()
+                    val types = scheduleRepository.observeScheduleTypes().first()
+                    BackupDocument(
+                        exportedAt = System.currentTimeMillis(),
+                        schedules = schedules.map { it.toBackup() },
+                        types = types.map { it.toBackup() },
+                    )
+                }
                 withContext(Dispatchers.IO) {
                     context.contentResolver.openOutputStream(uri)?.use { it.write(backupJson.encodeToString(document).toByteArray()) } ?: throw IOException("write")
                 }
@@ -414,8 +441,8 @@ fun SettingsDataScreen(
                 runCatching {
                     val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: throw IOException("read")
                     backupJson.decodeFromString<BackupDocument>(text).let { document ->
-                        require(document.schemaVersion in 1..2)
-                        document.schedules.mapNotNull(BackupSchedule::toScheduleWithSteps)
+                        require(document.schemaVersion in 1..3)
+                        document.toBackupData()
                     }
                 }.getOrNull()
             }
@@ -474,15 +501,15 @@ fun SettingsDataScreen(
             },
         )
     }
-    pendingImport?.let { schedules ->
+    pendingImport?.let { backup ->
         AlertDialog(
             onDismissRequest = { pendingImport = null },
-            title = { Text(stringResource(R.string.backup_found, schedules.size)) },
+            title = { Text(stringResource(R.string.backup_found, backup.schedules.size)) },
             text = { Text(stringResource(R.string.backup_import_question)) },
             dismissButton = { TextButton(onClick = { pendingImport = null }) { Text(stringResource(R.string.cancel)) } },
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = { viewModel.restoreSchedules(schedules, false) { ok -> feedback = if (ok) backupRestoredText else backupFailedText; pendingImport = null } }) { Text(stringResource(R.string.backup_append)) }
+                    TextButton(onClick = { viewModel.restoreBackup(backup.schedules, backup.types, false) { ok -> feedback = if (ok) backupRestoredText else backupFailedText; pendingImport = null } }) { Text(stringResource(R.string.backup_append)) }
                     TextButton(onClick = { replaceDialog = true }) { Text(stringResource(R.string.backup_replace), color = MaterialTheme.colorScheme.error) }
                 }
             },
@@ -496,7 +523,8 @@ fun SettingsDataScreen(
             dismissButton = { TextButton(onClick = { replaceDialog = false }) { Text(stringResource(R.string.cancel)) } },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.restoreSchedules(pendingImport.orEmpty(), true) { ok -> feedback = if (ok) backupRestoredText else backupFailedText; pendingImport = null; replaceDialog = false }
+                    val import = pendingImport
+                    if (import != null) viewModel.restoreBackup(import.schedules, import.types, true) { ok -> feedback = if (ok) backupRestoredText else backupFailedText; pendingImport = null; replaceDialog = false }
                 }) { Text(stringResource(R.string.backup_replace), color = MaterialTheme.colorScheme.error) }
             },
         )

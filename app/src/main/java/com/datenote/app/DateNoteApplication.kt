@@ -25,7 +25,7 @@ class DateNoteApplication : Application() {
 
     val database: DateNoteDatabase by lazy { DateNoteDatabase.create(this) }
     val scheduleRepository: ScheduleRepository by lazy {
-        ScheduleRepository(database.scheduleDao())
+        ScheduleRepository(database)
     }
     val userPreferencesRepository: UserPreferencesRepository by lazy {
         UserPreferencesRepository(this)

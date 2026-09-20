@@ -7,6 +7,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.datenote.app.data.local.DateNoteDatabase
 import com.datenote.app.data.local.ScheduleEntity
 import com.datenote.app.data.local.ScheduleStepEntity
+import com.datenote.app.data.local.ScheduleTypeEntity
+import com.datenote.app.data.local.ScheduleTypeStepEntity
 import com.datenote.app.domain.model.ScheduleStatus
 import java.time.LocalDate
 import kotlinx.coroutines.flow.first
@@ -105,5 +107,30 @@ class ScheduleDaoTest {
         assertEquals(listOf("制作完成", "打包"), updated.map { it.title })
         assertEquals(keptId, updated.first().id)
         assertTrue(original.first().id !in updated.map { it.id })
+    }
+
+    @Test
+    fun typeTemplatesAreIndependentFromScheduleSteps() = runBlocking {
+        val typeDao = database.scheduleTypeDao()
+        val typeId = typeDao.saveWithSteps(
+            ScheduleTypeEntity(name = "手作"),
+            listOf(
+                ScheduleTypeStepEntity(typeId = 0, title = "买毛", position = 0),
+                ScheduleTypeStepEntity(typeId = 0, title = "修剪", position = 1),
+            ),
+        )
+        val template = typeDao.getWithSteps(typeId)!!
+        val scheduleId = database.scheduleDao().saveWithSteps(
+            ScheduleEntity(title = "今天的手作", category = "手作", startEpochDay = 1),
+            template.toScheduleSteps(0),
+        )
+        database.scheduleDao().saveWithSteps(
+            database.scheduleDao().getById(scheduleId)!!,
+            database.scheduleDao().getSteps(scheduleId).mapIndexed { index, step -> step.copy(title = if (index == 0) "改过的步骤" else step.title) },
+        )
+        assertEquals(listOf("买毛", "修剪"), typeDao.getWithSteps(typeId)!!.orderedSteps.map { it.title })
+        assertEquals("改过的步骤", database.scheduleDao().getWithSteps(scheduleId)!!.orderedSteps.first().title)
+        typeDao.deleteById(typeId)
+        assertEquals("改过的步骤", database.scheduleDao().getWithSteps(scheduleId)!!.orderedSteps.first().title)
     }
 }

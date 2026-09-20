@@ -61,6 +61,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.datenote.app.R
 import com.datenote.app.data.local.ScheduleEntity
 import com.datenote.app.data.local.ScheduleStepEntity
+import com.datenote.app.data.local.ScheduleTypeWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
 import com.datenote.app.domain.model.ScheduleStatus
 import com.datenote.app.domain.model.statusAfterStepChange
@@ -108,6 +109,8 @@ fun ScheduleEditorScreen(
     var stepsSubmitted by rememberSaveable(schedule.id) { mutableStateOf(false) }
     var datePickerTarget by rememberSaveable { mutableStateOf<DateTarget?>(null) }
     var statusMenuVisible by remember { mutableStateOf(false) }
+    var typeMenuVisible by remember { mutableStateOf(false) }
+    var pendingType by remember { mutableStateOf<ScheduleTypeWithSteps?>(null) }
     var completionDialogVisible by remember { mutableStateOf(false) }
     var notificationUnavailable by rememberSaveable(schedule.id) { mutableStateOf(false) }
     val context = LocalContext.current
@@ -173,7 +176,51 @@ fun ScheduleEditorScreen(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
         )
         Spacer(Modifier.height(12.dp))
-        OutlinedTextField(value = category, onValueChange = { category = it }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.schedule_category_label)) }, singleLine = true)
+        Box {
+            OutlinedTextField(
+                value = category,
+                onValueChange = { category = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.schedule_category_label)) },
+                supportingText = { Text(stringResource(R.string.schedule_category_supporting)) },
+                trailingIcon = {
+                    IconButton(onClick = { typeMenuVisible = true }) {
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.choose_schedule_type))
+                    }
+                },
+                singleLine = true,
+            )
+            DropdownMenu(
+                expanded = typeMenuVisible,
+                onDismissRequest = { typeMenuVisible = false },
+            ) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.no_schedule_type)) },
+                    onClick = {
+                        typeMenuVisible = false
+                        category = ""
+                    },
+                )
+                state.scheduleTypes.forEach { type ->
+                    DropdownMenuItem(
+                        text = { Text(type.type.name, maxLines = 1) },
+                        onClick = {
+                            typeMenuVisible = false
+                            if (category.trim() == type.type.name) return@DropdownMenuItem
+                            if (steps.isNotEmpty() && type.orderedSteps.isNotEmpty()) {
+                                pendingType = type
+                            } else {
+                                category = type.type.name
+                                if (steps.isEmpty()) {
+                                    steps = viewModel.stepsFromType(type, schedule.id)
+                                    status = statusAfterStepChange(status, steps)
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+        }
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(value = note, onValueChange = { note = it }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.schedule_note_label)) }, placeholder = { Text(stringResource(R.string.schedule_note_placeholder)) }, minLines = 3)
         Spacer(Modifier.height(16.dp))
@@ -328,6 +375,39 @@ fun ScheduleEditorScreen(
         NotificationUnavailableDialog(
             onEnable = { notificationUnavailable = false; onRequestNotifications(); onSaved(schedule.id == 0L) },
             onLater = { notificationUnavailable = false; onSaved(schedule.id == 0L) },
+        )
+    }
+    pendingType?.let { type ->
+        val hasCompletedSteps = steps.any { it.isCompleted }
+        AlertDialog(
+            onDismissRequest = { pendingType = null },
+            title = { Text(stringResource(R.string.apply_schedule_type_title, type.type.name)) },
+            text = {
+                Text(
+                    if (hasCompletedSteps) {
+                        stringResource(R.string.apply_schedule_type_completed_message)
+                    } else {
+                        stringResource(R.string.apply_schedule_type_message)
+                    },
+                )
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { pendingType = null }) { Text(stringResource(R.string.cancel)) }
+                    TextButton(onClick = {
+                        category = type.type.name
+                        pendingType = null
+                    }) { Text(stringResource(R.string.only_change_schedule_type)) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    category = type.type.name
+                    steps = viewModel.stepsFromType(type, schedule.id)
+                    status = statusAfterStepChange(status, steps)
+                    pendingType = null
+                }) { Text(stringResource(R.string.replace_steps_with_template)) }
+            },
         )
     }
 }

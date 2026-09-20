@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.VerifiedUser
@@ -111,6 +112,14 @@ private fun SettingsHomeScreen(
                     title = stringResource(R.string.settings_personalization),
                     supporting = stringResource(R.string.nickname_value, state.preferences.nickname),
                     onClick = { onNavigate(SettingsDestination.PERSONALIZATION) },
+                )
+            }
+            item {
+                SettingsEntry(
+                    icon = Icons.AutoMirrored.Filled.List,
+                    title = stringResource(R.string.settings_schedule_types),
+                    supporting = stringResource(R.string.settings_schedule_types_summary),
+                    onClick = { onNavigate(SettingsDestination.SCHEDULE_TYPES) },
                 )
             }
             item { HorizontalDivider() }

@@ -21,6 +21,7 @@ data class UserPreferences(
     val dynamicColor: Boolean = true,
     val defaultReminderMinutes: Int = 24 * 60,
     val defaultReminderTimeMinutes: Int = 9 * 60,
+    val defaultExpandSteps: Boolean = true,
     val aiBaseUrl: String = "https://api.openai.com/v1",
     val aiModel: String = "gpt-4o-mini",
 )
@@ -34,6 +35,7 @@ class UserPreferencesRepository(private val context: Context) {
         val dynamicColor = booleanPreferencesKey("dynamic_color")
         val defaultReminderMinutes = intPreferencesKey("default_reminder_minutes")
         val defaultReminderTimeMinutes = intPreferencesKey("default_reminder_time_minutes")
+        val defaultExpandSteps = booleanPreferencesKey("default_expand_steps")
         val aiBaseUrl = stringPreferencesKey("ai_base_url")
         val aiModel = stringPreferencesKey("ai_model")
     }
@@ -49,6 +51,7 @@ class UserPreferencesRepository(private val context: Context) {
             dynamicColor = values[Keys.dynamicColor] ?: true,
             defaultReminderMinutes = values[Keys.defaultReminderMinutes] ?: 24 * 60,
             defaultReminderTimeMinutes = values[Keys.defaultReminderTimeMinutes] ?: 9 * 60,
+            defaultExpandSteps = values[Keys.defaultExpandSteps] ?: true,
             aiBaseUrl = values[Keys.aiBaseUrl] ?: "https://api.openai.com/v1",
             aiModel = values[Keys.aiModel] ?: "gpt-4o-mini",
         )
@@ -80,6 +83,10 @@ class UserPreferencesRepository(private val context: Context) {
 
     suspend fun setDefaultReminderTimeMinutes(minutes: Int) {
         context.userPreferencesDataStore.edit { it[Keys.defaultReminderTimeMinutes] = minutes }
+    }
+
+    suspend fun setDefaultExpandSteps(enabled: Boolean) {
+        context.userPreferencesDataStore.edit { it[Keys.defaultExpandSteps] = enabled }
     }
 
     suspend fun setAiBaseUrl(url: String) {

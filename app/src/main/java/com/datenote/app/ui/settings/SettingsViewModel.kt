@@ -16,6 +16,7 @@ import com.datenote.app.reminder.ReminderReliability
 import com.datenote.app.reminder.NotificationAccess
 import android.content.Context
 import com.datenote.app.data.local.ScheduleWithSteps
+import com.datenote.app.data.local.ScheduleTypeWithSteps
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -53,6 +54,7 @@ class SettingsViewModel(
     fun setDynamicColor(value: Boolean) { viewModelScope.launch { preferencesRepository.setDynamicColor(value) } }
     fun setDefaultReminder(value: Int) { viewModelScope.launch { preferencesRepository.setDefaultReminderMinutes(value) } }
     fun setDefaultReminderTime(value: Int) { viewModelScope.launch { preferencesRepository.setDefaultReminderTimeMinutes(value) } }
+    fun setDefaultExpandSteps(value: Boolean) { viewModelScope.launch { preferencesRepository.setDefaultExpandSteps(value) } }
 
     fun refreshReliability(context: Context) {
         _state.value = _state.value.copy(reliability = NotificationAccess.reliability(context))
@@ -86,14 +88,19 @@ class SettingsViewModel(
     }
 
     fun restoreSchedules(schedules: List<ScheduleWithSteps>, replace: Boolean, onFinished: (Boolean) -> Unit) {
+        restoreBackup(schedules, emptyList(), replace, onFinished)
+    }
+
+    fun restoreBackup(
+        schedules: List<ScheduleWithSteps>,
+        types: List<ScheduleTypeWithSteps>,
+        replace: Boolean,
+        onFinished: (Boolean) -> Unit,
+    ) {
         viewModelScope.launch {
             val result = runCatching {
-                if (replace) {
-                    reminderScheduler.cancelAll()
-                    scheduleRepository.replaceAllWithSteps(schedules)
-                } else {
-                    schedules.map { scheduleRepository.saveWithSteps(it.schedule, it.orderedSteps) }
-                }
+                scheduleRepository.restoreAllWithSteps(schedules, types, replace)
+                if (replace) reminderScheduler.cancelAll()
                 scheduleRepository.observeAll().first().forEach { schedule ->
                     reminderScheduler.sync(schedule, _state.value.preferences.defaultReminderTimeMinutes)
                 }
