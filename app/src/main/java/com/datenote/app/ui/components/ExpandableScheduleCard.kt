@@ -207,7 +207,7 @@ private fun ScheduleCardInfo(
 ) {
     val entity = schedule.schedule
     Row(
-        modifier = modifier,
+        modifier = modifier.heightIn(min = AppSpacing.CardLeading),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(AppSpacing.Hairline),
     ) {
@@ -247,6 +247,7 @@ private fun ScheduleCardMeta(
     modifier: Modifier = Modifier,
 ) {
     val entity = schedule.schedule
+    val startsLater = LocalDate.now().toEpochDay() < entity.startEpochDay
     val dateLine = dateSummary(entity) + entity.minuteOfDay?.let {
         " · %02d:%02d".format(it / 60, it % 60)
     }.orEmpty()
@@ -267,14 +268,14 @@ private fun ScheduleCardMeta(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (overdue || completed) {
+            if (overdue || completed || startsLater) {
                 ScheduleStatusChip(
                     text = scheduleProgressText(schedule),
                     overdue = overdue,
                 )
             }
         }
-        if (!overdue && !completed) {
+        if (!overdue && !completed && !startsLater) {
             Text(
                 text = scheduleProgressText(schedule),
                 modifier = Modifier.fillMaxWidth(),
