@@ -11,15 +11,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,12 +26,10 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,6 +46,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.datenote.app.R
 import com.datenote.app.data.local.ScheduleTypeWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
+import com.datenote.app.ui.components.AppOutlinedTextField
+import com.datenote.app.ui.components.AppPrimaryButton
+import com.datenote.app.ui.components.AppSectionTitle
+import com.datenote.app.ui.components.AppTopAppBar
+import com.datenote.app.ui.components.ReorderableColumn
+import com.datenote.app.ui.theme.AppSpacing
 
 @Composable
 fun ScheduleTypesScreen(
@@ -62,14 +66,7 @@ fun ScheduleTypesScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.schedule_types_title)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
-                    }
-                },
-            )
+            AppTopAppBar(stringResource(R.string.schedule_types_title), onBack)
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onAdd) {
@@ -82,7 +79,7 @@ fun ScheduleTypesScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+                contentPadding = PaddingValues(horizontal = AppSpacing.ScreenHorizontal, vertical = AppSpacing.Tight),
             ) {
                 items(state.types, key = { it.type.id }) { type ->
                     ScheduleTypeListItem(
@@ -170,17 +167,12 @@ fun ScheduleTypeEditorScreen(
         factory = ScheduleTypeEditorViewModel.Factory(repository, typeId),
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val focusManager = LocalFocusManager.current
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(stringResource(if (typeId == null) R.string.add_schedule_type else R.string.edit_schedule_type))
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
-                    }
-                },
+            AppTopAppBar(
+                title = stringResource(if (typeId == null) R.string.add_schedule_type else R.string.edit_schedule_type),
+                onBack = onBack,
             )
         },
     ) { padding ->
@@ -189,11 +181,16 @@ fun ScheduleTypeEditorScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(
+                    start = AppSpacing.ScreenHorizontal,
+                    top = AppSpacing.ScreenTop,
+                    end = AppSpacing.ScreenHorizontal,
+                    bottom = AppSpacing.ScreenBottom,
+                ),
+                verticalArrangement = Arrangement.spacedBy(AppSpacing.Compact),
             ) {
                 item {
-                    OutlinedTextField(
+                    AppOutlinedTextField(
                         value = state.name,
                         onValueChange = viewModel::setName,
                         modifier = Modifier.fillMaxWidth(),
@@ -217,33 +214,41 @@ fun ScheduleTypeEditorScreen(
                     )
                 }
                 item {
-                    Text(stringResource(R.string.default_steps), style = MaterialTheme.typography.titleMedium)
-                    Text(stringResource(R.string.default_steps_support), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    AppSectionTitle(stringResource(R.string.default_steps))
+                    Text(stringResource(R.string.default_steps_support), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
                 if (state.steps.isEmpty()) {
                     item {
                         Text(stringResource(R.string.no_default_steps), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
-                    items(state.steps, key = { it.id }) { step ->
-                        val index = state.steps.indexOfFirst { it.id == step.id }
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = step.title,
-                                onValueChange = { viewModel.setStep(index, it) },
-                                modifier = Modifier.weight(1f),
-                                label = { Text(stringResource(R.string.step_name)) },
-                                isError = state.error == ScheduleTypeEditorError.STEP_REQUIRED && step.title.trim().isEmpty(),
-                                singleLine = true,
-                            )
-                            IconButton(enabled = index > 0, onClick = { viewModel.moveStep(index, -1) }) {
-                                Icon(Icons.Default.KeyboardArrowUp, contentDescription = stringResource(R.string.move_step_up))
-                            }
-                            IconButton(enabled = index < state.steps.lastIndex, onClick = { viewModel.moveStep(index, 1) }) {
-                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.move_step_down))
-                            }
-                            IconButton(onClick = { viewModel.removeStep(index) }) {
-                                Icon(Icons.Default.DeleteOutline, contentDescription = stringResource(R.string.delete_step))
+                    item {
+                        ReorderableColumn(
+                            items = state.steps,
+                            onMove = viewModel::moveStep,
+                            onDragStart = { focusManager.clearFocus() },
+                        ) { step, dragHandleModifier ->
+                            val index = state.steps.indexOfFirst { it.stableId == step.stableId }
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                AppOutlinedTextField(
+                                    value = step.title,
+                                    onValueChange = { viewModel.setStep(index, it) },
+                                    modifier = Modifier.weight(1f),
+                                    label = { Text(stringResource(R.string.step_name)) },
+                                    isError = state.error == ScheduleTypeEditorError.STEP_REQUIRED && step.title.trim().isEmpty(),
+                                    singleLine = true,
+                                    trailingIcon = {
+                                        Box(
+                                            modifier = dragHandleModifier.size(40.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Icon(Icons.Default.DragHandle, contentDescription = stringResource(R.string.reorder_steps), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    },
+                                )
+                                IconButton(onClick = { viewModel.removeStep(index) }) {
+                                    Icon(Icons.Default.DeleteOutline, contentDescription = stringResource(R.string.delete_step))
+                                }
                             }
                         }
                     }
@@ -257,7 +262,7 @@ fun ScheduleTypeEditorScreen(
                     }
                 }
                 item {
-                    Button(onClick = { viewModel.save(onSaved) }, modifier = Modifier.fillMaxWidth()) {
+                    AppPrimaryButton(onClick = { viewModel.save(onSaved) }, modifier = Modifier.fillMaxWidth()) {
                         Text(stringResource(R.string.save_schedule_type))
                     }
                 }

@@ -14,12 +14,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.FileDownload
@@ -29,13 +29,12 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SegmentedButton
@@ -43,7 +42,6 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -77,6 +75,11 @@ import com.datenote.app.data.repository.UserPreferencesRepository
 import com.datenote.app.data.secure.SecureApiKeyStore
 import com.datenote.app.reminder.ReminderScheduler
 import com.datenote.app.reminder.ReminderSettings
+import com.datenote.app.ui.components.AppOutlinedTextField
+import com.datenote.app.ui.components.AppPrimaryButton
+import com.datenote.app.ui.components.AppSectionTitle
+import com.datenote.app.ui.components.AppTopAppBar
+import com.datenote.app.ui.theme.AppSpacing
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -91,16 +94,7 @@ private fun SettingsDetailScaffold(
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(title) },
-                navigationIcon = {
-                    androidx.compose.material3.IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
-                    }
-                },
-            )
-        },
+        topBar = { AppTopAppBar(title = title, onBack = onBack) },
         content = content,
     )
 }
@@ -121,41 +115,40 @@ fun SettingsPersonalizationScreen(
     SettingsDetailScaffold(stringResource(R.string.settings_personalization), onBack) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            contentPadding = PaddingValues(horizontal = AppSpacing.ScreenHorizontal, vertical = AppSpacing.Tight),
         ) {
             item {
                 ListItem(
-                    modifier = Modifier.clickable { nicknameDialog = true },
-                    headlineContent = { Text(stringResource(R.string.my_nickname)) },
-                    supportingContent = { Text(stringResource(R.string.nickname_value, state.preferences.nickname)) },
-                    leadingContent = { Icon(Icons.Default.Person, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable { nicknameDialog = true },
+                    headlineContent = { Text(stringResource(R.string.my_nickname), style = MaterialTheme.typography.titleMedium) },
+                    supportingContent = { Text(stringResource(R.string.nickname_value, state.preferences.nickname), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    leadingContent = { Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                 )
             }
-            item { Text(stringResource(R.string.privacy_nickname), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            item { HorizontalDivider() }
-            item { Text(stringResource(R.string.theme_mode), Modifier.padding(start = 16.dp, top = 18.dp, bottom = 8.dp), style = MaterialTheme.typography.titleMedium) }
+            item { Text(stringResource(R.string.privacy_nickname), Modifier.padding(horizontal = AppSpacing.Content, vertical = AppSpacing.Tight), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+            item { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)) }
+            item { AppSectionTitle(stringResource(R.string.theme_mode), Modifier.padding(start = AppSpacing.Content, top = AppSpacing.Compact, bottom = AppSpacing.Tight)) }
             item { ThemePicker(state.preferences.themeMode, viewModel::setThemeMode) }
             item {
                 ListItem(
                     modifier = Modifier.clickable { viewModel.setDynamicColor(!state.preferences.dynamicColor) },
-                    headlineContent = { Text(stringResource(R.string.dynamic_color)) },
-                    supportingContent = { Text(stringResource(R.string.dynamic_color_support)) },
+                    headlineContent = { Text(stringResource(R.string.dynamic_color), style = MaterialTheme.typography.titleMedium) },
+                    supportingContent = { Text(stringResource(R.string.dynamic_color_support), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                     trailingContent = { Switch(checked = state.preferences.dynamicColor, onCheckedChange = viewModel::setDynamicColor) },
                 )
             }
-            item { HorizontalDivider() }
+            item { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)) }
             item {
                 Text(
                     stringResource(R.string.settings_schedule_cards),
-                    Modifier.padding(start = 16.dp, top = 18.dp, bottom = 8.dp),
-                    style = MaterialTheme.typography.titleMedium,
+                    Modifier.padding(start = AppSpacing.Content, top = AppSpacing.Compact, bottom = AppSpacing.Tight),
                 )
             }
             item {
                 ListItem(
                     modifier = Modifier.clickable { viewModel.setDefaultExpandSteps(!state.preferences.defaultExpandSteps) },
-                    headlineContent = { Text(stringResource(R.string.default_expand_steps)) },
-                    supportingContent = { Text(stringResource(R.string.default_expand_steps_support)) },
+                    headlineContent = { Text(stringResource(R.string.default_expand_steps), style = MaterialTheme.typography.titleMedium) },
+                    supportingContent = { Text(stringResource(R.string.default_expand_steps_support), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                     trailingContent = {
                         Switch(
                             checked = state.preferences.defaultExpandSteps,
@@ -171,7 +164,7 @@ fun SettingsPersonalizationScreen(
             onDismissRequest = { nicknameDialog = false },
             title = { Text(stringResource(R.string.change_nickname_title)) },
             text = {
-                OutlinedTextField(
+                AppOutlinedTextField(
                     value = nicknameInput,
                     onValueChange = { nicknameInput = it },
                     label = { Text(stringResource(R.string.nickname_label)) },
@@ -211,23 +204,23 @@ fun SettingsAiScreen(
     SettingsDetailScaffold(stringResource(R.string.settings_ai), onBack) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = AppSpacing.ScreenHorizontal, vertical = AppSpacing.ScreenTop),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.Compact),
         ) {
             item {
-                OutlinedTextField(baseUrl, { baseUrl = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.base_url)) }, supportingText = { Text(stringResource(R.string.base_url_support)) }, singleLine = true)
+                AppOutlinedTextField(baseUrl, { baseUrl = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.base_url)) }, supportingText = { Text(stringResource(R.string.base_url_support)) }, singleLine = true)
             }
             item {
-                OutlinedTextField(apiKey, { apiKey = it; viewModel.setApiKey(it) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.api_key)) }, supportingText = { Text(stringResource(R.string.api_key_support)) }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                AppOutlinedTextField(apiKey, { apiKey = it; viewModel.setApiKey(it) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.api_key)) }, supportingText = { Text(stringResource(R.string.api_key_support)) }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
             }
-            item { OutlinedTextField(model, { model = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.model_name)) }, singleLine = true) }
+            item { AppOutlinedTextField(model, { model = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.model_name)) }, singleLine = true) }
             item {
-                Button(onClick = { viewModel.saveAiSettings(baseUrl, model); saved = true }, modifier = Modifier.fillMaxWidth()) {
+                AppPrimaryButton(onClick = { viewModel.saveAiSettings(baseUrl, model); saved = true }, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.save_ai_settings))
                 }
             }
             item {
-                Button(onClick = { viewModel.testConnection(baseUrl, model, apiKey) }, enabled = state.connectionState != ConnectionState.TESTING, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { viewModel.testConnection(baseUrl, model, apiKey) }, enabled = state.connectionState != ConnectionState.TESTING, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Text(if (state.connectionState == ConnectionState.TESTING) stringResource(R.string.connection_testing) else stringResource(R.string.test_ai_connection))
                 }
             }
@@ -256,10 +249,10 @@ fun SettingsRemindersScreen(
     SettingsDetailScaffold(stringResource(R.string.settings_reminders), onBack) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = AppSpacing.ScreenHorizontal, vertical = AppSpacing.ScreenTop),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.Compact),
         ) {
-            item { Text(stringResource(R.string.default_reminder), style = MaterialTheme.typography.titleMedium) }
+            item { AppSectionTitle(stringResource(R.string.default_reminder)) }
             item {
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     val choices = listOf(1440 to R.string.reminder_one_day, 4320 to R.string.reminder_three_days, 10080 to R.string.reminder_one_week)
@@ -274,7 +267,7 @@ fun SettingsRemindersScreen(
                 }
             }
             item {
-                OutlinedTextField(
+                AppOutlinedTextField(
                     value = timeText,
                     onValueChange = { value ->
                         timeText = value
@@ -316,8 +309,8 @@ fun SettingsReliabilityScreen(
     SettingsDetailScaffold(stringResource(R.string.settings_reminder_reliability), onBack) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            contentPadding = PaddingValues(horizontal = AppSpacing.ScreenHorizontal, vertical = AppSpacing.Tight),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.Hairline),
         ) {
             val reliability = state.reliability
             item {
@@ -356,7 +349,7 @@ fun SettingsReliabilityScreen(
                     onClick = { ReminderSettings.openAppDetails(context) },
                 )
             }
-            item { Text(stringResource(R.string.reliability_background_hint), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            item { Text(stringResource(R.string.reliability_background_hint), Modifier.padding(AppSpacing.Content), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
             item { TextButton(onClick = { guideVisible = true }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.reliability_view_guide)) } }
         }
     }
@@ -379,11 +372,12 @@ private fun ReliabilityListItem(
     onClick: () -> Unit,
 ) {
     ListItem(
-        modifier = Modifier.clickable(onClick = onClick),
-        headlineContent = { Text(title) },
+        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(onClick = onClick),
+        headlineContent = { Text(title, style = MaterialTheme.typography.titleMedium) },
         supportingContent = {
             Text(
                 value,
+                style = MaterialTheme.typography.bodySmall,
                 color = when (enabled) {
                     true -> MaterialTheme.colorScheme.primary
                     false -> MaterialTheme.colorScheme.error
@@ -391,7 +385,7 @@ private fun ReliabilityListItem(
                 },
             )
         },
-        leadingContent = { Icon(icon, contentDescription = null) },
+        leadingContent = { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
     )
 }
 
@@ -453,36 +447,36 @@ fun SettingsDataScreen(
     SettingsDetailScaffold(stringResource(R.string.settings_data), onBack) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            contentPadding = PaddingValues(horizontal = AppSpacing.ScreenHorizontal, vertical = AppSpacing.ScreenTop),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.Hairline),
         ) {
             item {
                 ListItem(
                     modifier = Modifier.clickable { exportLauncher.launch(backupFileName) },
-                    leadingContent = { Icon(Icons.Default.FileDownload, contentDescription = null) },
-                    headlineContent = { Text(stringResource(R.string.export_backup)) },
-                    supportingContent = { Text(stringResource(R.string.export_backup_support)) },
+                    leadingContent = { Icon(Icons.Default.FileDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                    headlineContent = { Text(stringResource(R.string.export_backup), style = MaterialTheme.typography.titleMedium) },
+                    supportingContent = { Text(stringResource(R.string.export_backup_support), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 )
             }
-            item { HorizontalDivider() }
+            item { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)) }
             item {
                 ListItem(
                     modifier = Modifier.clickable { importLauncher.launch(arrayOf("application/json", "text/plain")) },
-                    leadingContent = { Icon(Icons.Default.FileUpload, contentDescription = null) },
-                    headlineContent = { Text(stringResource(R.string.import_backup)) },
-                    supportingContent = { Text(stringResource(R.string.import_backup_support)) },
+                    leadingContent = { Icon(Icons.Default.FileUpload, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                    headlineContent = { Text(stringResource(R.string.import_backup), style = MaterialTheme.typography.titleMedium) },
+                    supportingContent = { Text(stringResource(R.string.import_backup_support), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 )
             }
             feedback?.let { message ->
                 item { Text(message, Modifier.padding(16.dp), color = if (message == backupFailedText) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) }
             }
-            item { HorizontalDivider(Modifier.padding(vertical = 12.dp)) }
+            item { HorizontalDivider(Modifier.padding(vertical = AppSpacing.Compact), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)) }
             item {
                 ListItem(
                     modifier = Modifier.clickable { clearDialog = true },
                     leadingContent = { Icon(Icons.Default.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                     headlineContent = { Text(stringResource(R.string.clear_all_schedules), color = MaterialTheme.colorScheme.error) },
-                    supportingContent = { Text(stringResource(R.string.clear_all_support)) },
+                    supportingContent = { Text(stringResource(R.string.clear_all_support), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 )
             }
         }

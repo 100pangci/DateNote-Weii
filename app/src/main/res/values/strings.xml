@@ -64,7 +64,7 @@
     <string name="schedule_start_label">什么时候开始</string>
     <string name="schedule_end_label">什么时候完成</string>
     <string name="single_day_summary">%1$d月%2$d日</string>
-    <string name="date_range_summary">%1$d月%2$d日～%3$d月%4$d日，共 %5$d 天</string>
+    <string name="date_range_summary">共 %1$d 天</string>
     <string name="schedule_card_date_range">%1$d月%2$d日～%3$d月%4$d日</string>
     <string name="schedule_time_label">具体时间</string>
     <string name="schedule_time_supporting">不用精确到几点</string>
@@ -95,8 +95,7 @@
     <string name="add_step">＋ 添加一步</string>
     <string name="step_name">步骤名称</string>
     <string name="delete_step">删除</string>
-    <string name="move_step_up">上移步骤</string>
-    <string name="move_step_down">下移步骤</string>
+    <string name="reorder_steps">长按拖动步骤排序</string>
     <string name="expand_steps">展开制作步骤</string>
     <string name="collapse_steps">收起制作步骤</string>
     <string name="step_required">请填写步骤名称，或删除空步骤</string>

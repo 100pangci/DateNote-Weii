@@ -6,7 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -23,7 +26,6 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -45,6 +47,9 @@ import com.datenote.app.data.repository.UserPreferences
 import com.datenote.app.data.repository.UserPreferencesRepository
 import com.datenote.app.data.secure.SecureApiKeyStore
 import com.datenote.app.reminder.ReminderScheduler
+import com.datenote.app.ui.components.AppSectionTitle
+import com.datenote.app.ui.components.AppTopAppBar
+import com.datenote.app.ui.theme.AppSpacing
 
 @Composable
 fun SettingsScreen(
@@ -96,13 +101,13 @@ private fun SettingsHomeScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.settings)) }) },
+        topBar = { AppTopAppBar(stringResource(R.string.settings)) },
     ) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            contentPadding = PaddingValues(horizontal = AppSpacing.ScreenHorizontal, vertical = AppSpacing.Tight),
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             item { SettingsGroupTitle(stringResource(R.string.settings_group_preferences)) }
@@ -122,7 +127,7 @@ private fun SettingsHomeScreen(
                     onClick = { onNavigate(SettingsDestination.SCHEDULE_TYPES) },
                 )
             }
-            item { HorizontalDivider() }
+            item { SettingsDivider() }
             item { SettingsGroupTitle(stringResource(R.string.settings_group_assistant)) }
             item {
                 SettingsEntry(
@@ -132,7 +137,7 @@ private fun SettingsHomeScreen(
                     onClick = { onNavigate(SettingsDestination.AI) },
                 )
             }
-            item { HorizontalDivider() }
+            item { SettingsDivider() }
             item { SettingsGroupTitle(stringResource(R.string.settings_group_notifications)) }
             item {
                 SettingsEntry(
@@ -142,7 +147,7 @@ private fun SettingsHomeScreen(
                     onClick = { onNavigate(SettingsDestination.REMINDERS) },
                 )
             }
-            item { HorizontalDivider() }
+            item { SettingsDivider() }
             item {
                 SettingsEntry(
                     icon = Icons.Default.VerifiedUser,
@@ -151,7 +156,7 @@ private fun SettingsHomeScreen(
                     onClick = { onNavigate(SettingsDestination.RELIABILITY) },
                 )
             }
-            item { HorizontalDivider() }
+            item { SettingsDivider() }
             item { SettingsGroupTitle(stringResource(R.string.settings_group_data)) }
             item {
                 SettingsEntry(
@@ -161,7 +166,7 @@ private fun SettingsHomeScreen(
                     onClick = { onNavigate(SettingsDestination.DATA) },
                 )
             }
-            item { HorizontalDivider() }
+            item { SettingsDivider() }
             item {
                 SettingsEntry(
                     icon = Icons.Default.Info,
@@ -176,11 +181,17 @@ private fun SettingsHomeScreen(
 
 @Composable
 private fun SettingsGroupTitle(title: String) {
-    Text(
-        text = title,
-        modifier = Modifier.padding(start = 16.dp, top = 18.dp, bottom = 6.dp),
-        color = MaterialTheme.colorScheme.primary,
-        style = MaterialTheme.typography.labelLarge,
+    AppSectionTitle(
+        title = title,
+        modifier = Modifier.padding(start = AppSpacing.Content, top = AppSpacing.Section - AppSpacing.Compact, bottom = AppSpacing.Tight),
+    )
+}
+
+@Composable
+private fun SettingsDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 56.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
     )
 }
 
@@ -192,16 +203,20 @@ private fun SettingsEntry(
     onClick: () -> Unit,
 ) {
     ListItem(
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 64.dp)
+            .clickable(onClick = onClick),
         leadingContent = {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
         },
-        headlineContent = { Text(title) },
-        supportingContent = { Text(supporting) },
+        headlineContent = { Text(title, style = MaterialTheme.typography.titleMedium) },
+        supportingContent = { Text(supporting, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
         trailingContent = {
             Icon(
                 Icons.Default.ChevronRight,
                 contentDescription = stringResource(R.string.open_setting),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         },
     )

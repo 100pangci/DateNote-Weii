@@ -8,19 +8,23 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -53,6 +57,7 @@ import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.domain.model.ScheduleStatus
 import com.datenote.app.domain.model.isOverdue
 import com.datenote.app.domain.model.progress
+import com.datenote.app.ui.theme.AppSpacing
 import java.time.LocalDate
 
 /**
@@ -92,6 +97,7 @@ fun ExpandableScheduleCard(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize(),
+        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = if (completed) {
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
@@ -99,12 +105,13 @@ fun ExpandableScheduleCard(
                 MaterialTheme.colorScheme.surfaceContainer
             },
         ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 8.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
+                    .padding(start = AppSpacing.Tight, top = AppSpacing.Hairline, bottom = AppSpacing.Hairline, end = AppSpacing.Hairline),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Checkbox(
@@ -115,7 +122,7 @@ fun ExpandableScheduleCard(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 4.dp),
+                        .padding(horizontal = AppSpacing.Hairline),
                     verticalArrangement = Arrangement.spacedBy(1.dp),
                 ) {
                     Text(
@@ -153,7 +160,7 @@ fun ExpandableScheduleCard(
                             text = scheduleProgressText(schedule),
                             modifier = Modifier.weight(1f),
                             color = if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.labelMedium,
+                             style = MaterialTheme.typography.labelMedium,
                             maxLines = 2,
                             softWrap = true,
                         )
@@ -175,7 +182,7 @@ fun ExpandableScheduleCard(
                             progress = { animatedProgress.coerceIn(0f, 1f) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 1.dp),
+                                .padding(top = AppSpacing.Hairline),
                         )
                     }
                 }
@@ -210,9 +217,9 @@ fun ExpandableScheduleCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 16.dp, end = 8.dp, bottom = 4.dp),
+                        .padding(start = AppSpacing.Content, end = AppSpacing.Tight, bottom = AppSpacing.Hairline),
                 ) {
-                    HorizontalDivider()
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                     schedule.orderedSteps.forEach { step ->
                         Row(
                             modifier = Modifier
@@ -269,8 +276,11 @@ private fun ScheduleMoreMenu(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { onExpandChange(false) },
+            modifier = Modifier.widthIn(max = 240.dp),
         ) {
             DropdownMenuItem(
+                modifier = Modifier.heightIn(min = 48.dp),
+                contentPadding = PaddingValues(horizontal = AppSpacing.Content),
                 text = { Text(stringResource(R.string.edit_schedule)) },
                 leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
                 onClick = {
@@ -279,29 +289,40 @@ private fun ScheduleMoreMenu(
                 },
             )
             DropdownMenuItem(
+                modifier = Modifier.heightIn(min = 48.dp),
+                contentPadding = PaddingValues(horizontal = AppSpacing.Content),
                 text = { Text(stringResource(if (completed) R.string.mark_todo else R.string.mark_completed)) },
+                leadingIcon = { Icon(Icons.Default.Check, contentDescription = null) },
                 onClick = {
                     onExpandChange(false)
                     onToggleCompleted()
                 },
             )
             DropdownMenuItem(
+                modifier = Modifier.heightIn(min = 48.dp),
+                contentPadding = PaddingValues(horizontal = AppSpacing.Content),
                 text = { Text(stringResource(R.string.postpone_one_day)) },
+                leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null) },
                 onClick = {
                     onExpandChange(false)
                     onPostpone(1)
                 },
             )
             DropdownMenuItem(
+                modifier = Modifier.heightIn(min = 48.dp),
+                contentPadding = PaddingValues(horizontal = AppSpacing.Content),
                 text = { Text(stringResource(R.string.postpone_one_week)) },
+                leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null) },
                 onClick = {
                     onExpandChange(false)
                     onPostpone(7)
                 },
             )
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.delete_schedule)) },
-                leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null) },
+                modifier = Modifier.heightIn(min = 48.dp),
+                contentPadding = PaddingValues(horizontal = AppSpacing.Content),
+                text = { Text(stringResource(R.string.delete_schedule), color = MaterialTheme.colorScheme.error) },
+                leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                 onClick = {
                     onExpandChange(false)
                     onDelete()

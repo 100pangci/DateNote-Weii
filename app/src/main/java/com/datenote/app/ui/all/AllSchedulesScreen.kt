@@ -14,15 +14,14 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
@@ -44,6 +43,9 @@ import com.datenote.app.reminder.ReminderScheduler
 import com.datenote.app.domain.model.ScheduleStatus
 import com.datenote.app.domain.model.progress
 import com.datenote.app.ui.components.ExpandableScheduleCard
+import com.datenote.app.ui.components.AppSoftTextField
+import com.datenote.app.ui.components.AppTopAppBar
+import com.datenote.app.ui.theme.AppSpacing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,15 +71,15 @@ fun AllSchedulesScreen(
     )
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.all_schedules)) }) },
+        topBar = { AppTopAppBar(stringResource(R.string.all_schedules)) },
     ) { padding ->
         Column(
             Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+                .padding(horizontal = AppSpacing.ScreenHorizontal, vertical = AppSpacing.ScreenTop),
         ) {
-            OutlinedTextField(
+            AppSoftTextField(
                 value = query,
                 onValueChange = viewModel::setQuery,
                 modifier = Modifier.fillMaxWidth(),
@@ -92,34 +94,48 @@ fun AllSchedulesScreen(
                 } else null,
                 singleLine = true,
             )
-            Spacer(Modifier.height(12.dp))
-            Text(stringResource(R.string.schedule_filter_label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(AppSpacing.Compact))
+            Text(stringResource(R.string.schedule_filter_label), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(AppSpacing.Tight))
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.large,
-                tonalElevation = 1.dp,
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                tonalElevation = 0.dp,
             ) {
                 androidx.compose.foundation.layout.Row(
                     Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                        .padding(horizontal = AppSpacing.Tight, vertical = AppSpacing.Hairline),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     filters.forEach { (value, label) ->
-                        FilterChip(selected = filter == value, onClick = { viewModel.setFilter(value) }, label = { Text(stringResource(label)) })
+                        FilterChip(
+                            selected = filter == value,
+                            onClick = { viewModel.setFilter(value) },
+                            label = { Text(stringResource(label), style = MaterialTheme.typography.labelMedium) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                        )
                     }
                 }
             }
-            Spacer(Modifier.height(16.dp))
-            HorizontalDivider()
+            Spacer(Modifier.height(AppSpacing.Content))
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = AppSpacing.Tight),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+            )
             if (schedules.isEmpty()) {
                 EmptyAllState(filter = filter, query = query)
             } else {
                 LazyColumn(
                     Modifier.weight(1f),
-                    contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+                    contentPadding = PaddingValues(top = AppSpacing.Content, bottom = AppSpacing.ScreenBottom),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     item {
@@ -135,7 +151,7 @@ fun AllSchedulesScreen(
                             Text(
                                 text = stringResource(R.string.schedules_count, schedules.size),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.labelMedium,
+                                style = MaterialTheme.typography.bodySmall,
                             )
                         }
                     }

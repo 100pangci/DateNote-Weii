@@ -18,15 +18,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBackIosNew
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -61,6 +58,8 @@ import com.datenote.app.domain.model.monthGrid
 import com.datenote.app.domain.model.progress
 import com.datenote.app.reminder.ReminderScheduler
 import com.datenote.app.ui.components.ExpandableScheduleCard
+import com.datenote.app.ui.components.AppCard
+import com.datenote.app.ui.theme.AppSpacing
 import java.time.LocalDate
 import java.time.YearMonth
 import kotlinx.coroutines.launch
@@ -88,13 +87,18 @@ fun HomeScreen(
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, top = 22.dp, end = 20.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(
+                start = AppSpacing.ScreenHorizontal,
+                top = AppSpacing.ScreenTop,
+                end = AppSpacing.ScreenHorizontal,
+                bottom = 88.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.Compact),
         ) {
             item {
                 GreetingBlock(nickname)
                 if (showWelcome) {
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(AppSpacing.Compact))
                     WelcomeCard(nickname)
                 }
             }
@@ -120,7 +124,7 @@ fun HomeScreen(
                             )
                         }
                     } ?: stringResource(R.string.select_day_to_view_schedules),
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                 )
             }
             if (selectedDate != null && selectedSchedules.isEmpty()) {
@@ -149,7 +153,7 @@ fun HomeScreen(
         }
         FloatingActionButton(
             onClick = onAdd,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(AppSpacing.Content).size(52.dp),
             containerColor = MaterialTheme.colorScheme.primaryContainer,
         ) {
             Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_schedule))
@@ -205,22 +209,21 @@ private fun GreetingBlock(nickname: String) {
         hour < 18 -> stringResource(R.string.greeting_afternoon_message)
         else -> stringResource(R.string.greeting_evening_message)
     }
-    Column {
+    Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.Hairline)) {
         Text(greeting, style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(4.dp))
-        Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
 @Composable
 private fun WelcomeCard(nickname: String) {
-    Card(
+    AppCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        containerColor = MaterialTheme.colorScheme.primaryContainer,
     ) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+        Column(Modifier.fillMaxWidth().padding(AppSpacing.Content), verticalArrangement = Arrangement.spacedBy(AppSpacing.Hairline)) {
             Text(stringResource(R.string.welcome_back, nickname), style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(R.string.welcome_back_message), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.welcome_back_message), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -266,8 +269,8 @@ private fun CalendarCard(
         }
     }
 
-    Card(shape = RoundedCornerShape(24.dp)) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 14.dp)) {
+    AppCard {
+        Column(Modifier.padding(horizontal = AppSpacing.Content, vertical = AppSpacing.Compact)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = stringResource(R.string.month_title, visibleMonth.year, visibleMonth.monthValue),
@@ -301,15 +304,16 @@ private fun CalendarCard(
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall,
                     )
                 }
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(AppSpacing.Hairline))
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(312.dp),
+                    .height(276.dp),
                 key = { it },
             ) { page ->
                 val pageMonth = pagerBaseMonth.plusMonths((page - CalendarAnchorPage).toLong())
@@ -380,7 +384,7 @@ private fun CalendarDay(
     val dateDescription = stringResource(R.string.calendar_date_description, date.year, date.monthValue, date.dayOfMonth)
     Box(
         modifier = modifier
-            .height(52.dp)
+            .height(46.dp)
             .padding(2.dp)
             .clip(CircleShape)
             .clickable(onClick = onClick)
@@ -389,7 +393,7 @@ private fun CalendarDay(
             },
         contentAlignment = Alignment.Center,
     ) {
-        if (isSelected) Box(Modifier.size(38.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape))
+        if (isSelected) Box(Modifier.size(34.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape))
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = date.dayOfMonth.toString(),
@@ -408,15 +412,15 @@ private fun CalendarDay(
 
 @Composable
 private fun EmptyDayState(isToday: Boolean, monthIsEmpty: Boolean) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))) {
-        Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    AppCard(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)) {
+        Column(Modifier.fillMaxWidth().padding(AppSpacing.Section), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 if (monthIsEmpty) stringResource(R.string.month_empty_title)
                 else if (isToday) stringResource(R.string.today_empty)
                 else stringResource(R.string.other_day_empty),
                 style = MaterialTheme.typography.titleMedium,
             )
-            if (monthIsEmpty) Text(stringResource(R.string.month_empty_message), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (monthIsEmpty) Text(stringResource(R.string.month_empty_message), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

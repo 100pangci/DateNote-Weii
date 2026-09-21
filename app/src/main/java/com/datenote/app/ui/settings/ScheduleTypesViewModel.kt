@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.datenote.app.data.local.ScheduleTypeWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
+import com.datenote.app.ui.components.ReorderableItem
+import com.datenote.app.ui.components.moveItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,7 +51,10 @@ data class ScheduleTypeEditorState(
     val error: ScheduleTypeEditorError? = null,
 )
 
-data class ScheduleTypeDraftStep(val id: Long, val title: String)
+data class ScheduleTypeDraftStep(val id: Long, val title: String) : ReorderableItem {
+    override val stableId: Long
+        get() = id
+}
 
 enum class ScheduleTypeEditorError {
     NAME_REQUIRED,
@@ -64,6 +69,9 @@ class ScheduleTypeEditorViewModel(
 ) : ViewModel() {
     private val _state = MutableStateFlow(ScheduleTypeEditorState())
     val state: StateFlow<ScheduleTypeEditorState> = _state.asStateFlow()
+
+    // Negative ids keep unsaved rows distinct from database ids while dragging.
+    private var nextLocalStepId = -1L
 
     init {
         viewModelScope.launch {
@@ -83,19 +91,14 @@ class ScheduleTypeEditorViewModel(
         copy(steps = steps.mapIndexed { current, old -> if (current == index) old.copy(title = value) else old }, error = null)
     }
 
-    fun addStep() = update { copy(steps = steps + ScheduleTypeDraftStep(System.nanoTime(), ""), error = null) }
+    fun addStep() = update { copy(steps = steps + ScheduleTypeDraftStep(nextLocalStepId--, ""), error = null) }
 
     fun removeStep(index: Int) = update {
         copy(steps = steps.filterIndexed { current, _ -> current != index }, error = null)
     }
 
-    fun moveStep(index: Int, offset: Int) = update {
-        val target = index + offset
-        if (target !in steps.indices) return@update this
-        val reordered = steps.toMutableList()
-        val value = reordered.removeAt(index)
-        reordered.add(target, value)
-        copy(steps = reordered, error = null)
+    fun moveStep(fromIndex: Int, toIndex: Int) = update {
+        copy(steps = steps.moveItem(fromIndex, toIndex), error = null)
     }
 
     fun save(onSaved: () -> Unit) {

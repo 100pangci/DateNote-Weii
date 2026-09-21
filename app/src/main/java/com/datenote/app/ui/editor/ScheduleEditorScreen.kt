@@ -8,19 +8,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
@@ -33,17 +33,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -53,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -68,6 +67,15 @@ import com.datenote.app.domain.model.statusAfterStepChange
 import com.datenote.app.reminder.NotificationAccess
 import com.datenote.app.reminder.ReminderScheduler
 import com.datenote.app.ui.reminder.NotificationUnavailableDialog
+import com.datenote.app.ui.components.AppCard
+import com.datenote.app.ui.components.AppOutlinedTextField
+import com.datenote.app.ui.components.AppPrimaryButton
+import com.datenote.app.ui.components.AppSectionTitle
+import com.datenote.app.ui.components.AppTopAppBar
+import com.datenote.app.ui.components.AppValueRow
+import com.datenote.app.ui.components.ReorderableColumn
+import com.datenote.app.ui.components.moveItem
+import com.datenote.app.ui.theme.AppSpacing
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -113,7 +121,16 @@ fun ScheduleEditorScreen(
     var pendingType by remember { mutableStateOf<ScheduleTypeWithSteps?>(null) }
     var completionDialogVisible by remember { mutableStateOf(false) }
     var notificationUnavailable by rememberSaveable(schedule.id) { mutableStateOf(false) }
+    // Stable row ids for unsaved steps, which all share the database id 0.
+    val transientStepIds = remember(schedule.id) { mutableMapOf<ScheduleStepEntity, Long>() }
+    var nextTransientStepId by remember(schedule.id) { mutableLongStateOf(-1L) }
+    fun stepEntityId(step: ScheduleStepEntity): Long = if (step.id != 0L) {
+        step.id
+    } else {
+        transientStepIds.getOrPut(step) { nextTransientStepId-- }
+    }
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val titleError = titleSubmitted && title.trim().isEmpty()
     val stepsError = stepsSubmitted && steps.any { it.title.trim().isEmpty() }
     val parsedTime = remember(timeText) { parseTime(timeText) }
@@ -126,20 +143,22 @@ fun ScheduleEditorScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(if (schedule.id == 0L) stringResource(R.string.new_schedule_title) else stringResource(R.string.edit_schedule_title))
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
-                    }
-                },
+            AppTopAppBar(
+                title = if (schedule.id == 0L) stringResource(R.string.new_schedule_title) else stringResource(R.string.edit_schedule_title),
+                onBack = onBack,
             )
         },
     ) { padding ->
-    Column(Modifier.fillMaxSize().padding(padding).imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp)) {
-        OutlinedTextField(
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .imePadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = AppSpacing.ScreenHorizontal, vertical = AppSpacing.ScreenTop),
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.Compact),
+    ) {
+        AppOutlinedTextField(
             value = title,
             onValueChange = { title = it; titleSubmitted = false },
             modifier = Modifier.fillMaxWidth(),
@@ -148,23 +167,30 @@ fun ScheduleEditorScreen(
             isError = titleError,
             supportingText = { if (titleError) Text(stringResource(R.string.title_required)) },
         )
-        Spacer(Modifier.height(16.dp))
-        Text(stringResource(R.string.schedule_start_label), style = MaterialTheme.typography.labelLarge)
-        OutlinedButton(onClick = { datePickerTarget = DateTarget.START }, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.date_year_month_day, startDate.year, startDate.monthValue, startDate.dayOfMonth))
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(stringResource(R.string.schedule_end_label), style = MaterialTheme.typography.labelLarge)
-        OutlinedButton(onClick = { datePickerTarget = DateTarget.END }, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.date_year_month_day, endDate.year, endDate.monthValue, endDate.dayOfMonth))
-        }
-        Text(
-            if (startDate == endDate) stringResource(R.string.single_day_summary, startDate.monthValue, startDate.dayOfMonth)
-            else stringResource(R.string.date_range_summary, startDate.monthValue, startDate.dayOfMonth, endDate.monthValue, endDate.dayOfMonth, endDate.toEpochDay() - startDate.toEpochDay() + 1),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        AppValueRow(
+            label = stringResource(R.string.schedule_start_label),
+            value = stringResource(R.string.date_year_month_day, startDate.year, startDate.monthValue, startDate.dayOfMonth),
+            onClick = { datePickerTarget = DateTarget.START },
+            modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
+        AppValueRow(
+            label = stringResource(R.string.schedule_end_label),
+            value = stringResource(R.string.date_year_month_day, endDate.year, endDate.monthValue, endDate.dayOfMonth),
+            onClick = { datePickerTarget = DateTarget.END },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (startDate != endDate) {
+            Text(
+                stringResource(
+                    R.string.date_range_summary,
+                    endDate.toEpochDay() - startDate.toEpochDay() + 1,
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = AppSpacing.Content),
+            )
+        }
+        AppOutlinedTextField(
             value = timeText,
             onValueChange = { timeText = it },
             modifier = Modifier.fillMaxWidth(),
@@ -175,9 +201,8 @@ fun ScheduleEditorScreen(
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
         )
-        Spacer(Modifier.height(12.dp))
         Box {
-            OutlinedTextField(
+            AppOutlinedTextField(
                 value = category,
                 onValueChange = { category = it },
                 modifier = Modifier.fillMaxWidth(),
@@ -193,6 +218,7 @@ fun ScheduleEditorScreen(
             DropdownMenu(
                 expanded = typeMenuVisible,
                 onDismissRequest = { typeMenuVisible = false },
+                modifier = Modifier.heightIn(max = 320.dp),
             ) {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.no_schedule_type)) },
@@ -221,15 +247,32 @@ fun ScheduleEditorScreen(
                 }
             }
         }
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(value = note, onValueChange = { note = it }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.schedule_note_label)) }, placeholder = { Text(stringResource(R.string.schedule_note_placeholder)) }, minLines = 3)
-        Spacer(Modifier.height(16.dp))
-        Text(stringResource(R.string.production_steps), style = MaterialTheme.typography.titleMedium)
+        AppOutlinedTextField(value = note, onValueChange = { note = it }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.schedule_note_label)) }, placeholder = { Text(stringResource(R.string.schedule_note_placeholder)) }, minLines = 3)
+        AppSectionTitle(stringResource(R.string.production_steps), modifier = Modifier.padding(top = AppSpacing.Tight))
         if (steps.isEmpty()) {
-            Text(stringResource(R.string.no_steps_message), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            TextButton(onClick = { steps = listOf(newStep(schedule.id)) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.add_first_step)) }
+            AppCard(
+                modifier = Modifier.fillMaxWidth(),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ) {
+                Column(
+                    Modifier.padding(AppSpacing.Content),
+                    verticalArrangement = Arrangement.spacedBy(AppSpacing.Tight),
+                ) {
+                    Text(stringResource(R.string.no_steps_message), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { steps = listOf(newStep(schedule.id)) }) { Text(stringResource(R.string.add_first_step)) }
+                }
+            }
         } else {
-            steps.forEachIndexed { index, step ->
+            val stepIds = steps.map(::stepEntityId)
+            ReorderableColumn(
+                items = stepIds,
+                onMove = { fromIndex, toIndex ->
+                    steps = steps.moveItem(fromIndex, toIndex)
+                },
+                onDragStart = { focusManager.clearFocus() },
+            ) { stepId, dragHandleModifier ->
+                val index = steps.indexOfFirst { stepEntityId(it) == stepId }
+                val step = steps[index]
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
                         checked = step.isCompleted,
@@ -240,28 +283,22 @@ fun ScheduleEditorScreen(
                             status = statusAfterStepChange(status, updated)
                         },
                     )
-                    OutlinedTextField(
+                    AppOutlinedTextField(
                         value = step.title,
                         onValueChange = { value -> steps = steps.mapIndexed { i, old -> if (i == index) old.copy(title = value) else old } },
                         modifier = Modifier.weight(1f).then(if (index == steps.lastIndex && step.title.isEmpty()) Modifier.focusRequester(focusRequester) else Modifier),
                         label = { Text(stringResource(R.string.step_name)) },
                         singleLine = true,
                         isError = stepsError && step.title.trim().isEmpty(),
+                        trailingIcon = {
+                            Box(
+                                modifier = dragHandleModifier.size(40.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(Icons.Default.DragHandle, contentDescription = stringResource(R.string.reorder_steps), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        },
                     )
-                    IconButton(enabled = index > 0, onClick = {
-                        val reordered = steps.toMutableList()
-                        val previous = reordered[index - 1]
-                        reordered[index - 1] = reordered[index]
-                        reordered[index] = previous
-                        steps = reordered
-                    }) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = stringResource(R.string.move_step_up)) }
-                    IconButton(enabled = index < steps.lastIndex, onClick = {
-                        val reordered = steps.toMutableList()
-                        val next = reordered[index + 1]
-                        reordered[index + 1] = reordered[index]
-                        reordered[index] = next
-                        steps = reordered
-                    }) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.move_step_down)) }
                     IconButton(onClick = { steps = steps.filterIndexed { i, _ -> i != index } }) { Icon(Icons.Default.DeleteOutline, stringResource(R.string.delete_step)) }
                 }
             }
@@ -271,10 +308,13 @@ fun ScheduleEditorScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.add_step)) }
         }
-        Spacer(Modifier.height(12.dp))
-        Text(stringResource(R.string.schedule_status_label), style = MaterialTheme.typography.labelLarge)
+        AppSectionTitle(stringResource(R.string.schedule_status_label), modifier = Modifier.padding(top = AppSpacing.Tight))
         Box {
-            FilterChip(selected = false, onClick = { statusMenuVisible = true }, label = { Text(statusLabel(status)) })
+            FilterChip(
+                selected = status != ScheduleStatus.TODO,
+                onClick = { statusMenuVisible = true },
+                label = { Text(statusLabel(status), style = MaterialTheme.typography.labelMedium) },
+            )
             DropdownMenu(expanded = statusMenuVisible, onDismissRequest = { statusMenuVisible = false }) {
                 ScheduleStatus.entries.forEach { option ->
                     DropdownMenuItem(
@@ -288,7 +328,6 @@ fun ScheduleEditorScreen(
                 }
             }
         }
-        Spacer(Modifier.height(12.dp))
         ListItem(
             modifier = Modifier.fillMaxWidth(),
             headlineContent = { Text(stringResource(R.string.schedule_reminder_label)) },
@@ -306,8 +345,7 @@ fun ScheduleEditorScreen(
             },
             trailingContent = { Switch(checked = reminderEnabled, onCheckedChange = { reminderEnabled = it }) },
         )
-        Spacer(Modifier.height(24.dp))
-        Button(
+        AppPrimaryButton(
             onClick = {
                 titleSubmitted = true
                 stepsSubmitted = true
@@ -331,7 +369,7 @@ fun ScheduleEditorScreen(
             },
             modifier = Modifier.fillMaxWidth(),
         ) { Text(stringResource(R.string.save_schedule)) }
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(AppSpacing.ScreenBottom))
     }
     }
 

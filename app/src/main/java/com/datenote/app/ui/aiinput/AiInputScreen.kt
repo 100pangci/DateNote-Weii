@@ -1,6 +1,7 @@
 package com.datenote.app.ui.aiinput
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -17,10 +19,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -30,7 +31,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.Surface
@@ -39,6 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -49,6 +50,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.datenote.app.R
@@ -61,6 +63,14 @@ import com.datenote.app.data.repository.ScheduleRepository
 import com.datenote.app.reminder.ReminderScheduler
 import com.datenote.app.reminder.NotificationAccess
 import com.datenote.app.ui.reminder.NotificationUnavailableDialog
+import com.datenote.app.ui.components.AppCard
+import com.datenote.app.ui.components.AppOutlinedTextField
+import com.datenote.app.ui.components.AppPrimaryButton
+import com.datenote.app.ui.components.ReorderableColumn
+import com.datenote.app.ui.components.ReorderableItem
+import com.datenote.app.ui.components.moveItem
+import com.datenote.app.ui.components.AppSoftTextField
+import com.datenote.app.ui.theme.AppSpacing
 import com.datenote.app.domain.parser.ParsedSchedule
 import com.datenote.app.domain.parser.ParsedStep
 import java.time.LocalDate
@@ -83,7 +93,10 @@ private data class EditableAiDraft(
     val uncertainties: List<String>,
 )
 
-private data class EditableAiStep(val id: Long, val title: String, val isCompleted: Boolean)
+private data class EditableAiStep(val id: Long, val title: String, val isCompleted: Boolean) : ReorderableItem {
+    override val stableId: Long
+        get() = id
+}
 
 @Composable
 fun AiInputScreen(
@@ -156,30 +169,38 @@ fun AiInputScreen(
 @Composable
 private fun InputPage(state: AiInputState, onInput: (String) -> Unit, onSubmit: () -> Unit) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxSize().imePadding(),
+        contentPadding = PaddingValues(horizontal = AppSpacing.ScreenHorizontal, vertical = AppSpacing.ScreenTop),
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.Content),
     ) {
         item {
             Text(stringResource(R.string.ai_page_title), style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.height(8.dp))
-            Text(stringResource(R.string.ai_input_placeholder), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(AppSpacing.Tight))
+            Text(
+                stringResource(R.string.ai_input_placeholder),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
         item {
-            OutlinedTextField(
+            AppSoftTextField(
                 value = state.input,
                 onValueChange = onInput,
                 modifier = Modifier.fillMaxWidth(),
-                minLines = 7,
-                maxLines = 12,
-                label = { Text(stringResource(R.string.ai_input_short)) },
+                minLines = 5,
+                maxLines = 10,
+                placeholder = { Text(stringResource(R.string.ai_input_short)) },
             )
         }
         state.error?.let { error ->
             item { ErrorMessage(error) }
         }
         item {
-            Button(onClick = onSubmit, enabled = state.input.isNotBlank() && !state.isProcessing, modifier = Modifier.fillMaxWidth()) {
+            AppPrimaryButton(
+                onClick = onSubmit,
+                enabled = state.input.isNotBlank() && !state.isProcessing,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 if (state.isProcessing) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -205,7 +226,7 @@ private fun ErrorMessage(error: AiInputError) {
         AiInputError.EMPTY -> stringResource(R.string.ai_empty_error)
     }
     Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
-        Text(message, Modifier.fillMaxWidth().padding(14.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+        Text(message, Modifier.fillMaxWidth().padding(AppSpacing.Content), color = MaterialTheme.colorScheme.onErrorContainer)
     }
 }
 
@@ -222,9 +243,9 @@ private fun ReviewPage(
     onConfirm: () -> Unit,
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize().imePadding(),
+        contentPadding = PaddingValues(horizontal = AppSpacing.ScreenHorizontal, vertical = AppSpacing.ScreenTop),
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.Compact),
     ) {
         item {
             Text(stringResource(R.string.ai_review_title), style = MaterialTheme.typography.headlineSmall)
@@ -233,7 +254,7 @@ private fun ReviewPage(
         }
         if (warnings.isNotEmpty()) item {
             Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.medium) {
-                Text(warnings.joinToString("\n"), Modifier.fillMaxWidth().padding(14.dp))
+                Text(warnings.joinToString("\n"), Modifier.fillMaxWidth().padding(AppSpacing.Content))
             }
         }
         itemsIndexed(drafts, key = { _, draft -> draft.id }) { index, draft ->
@@ -241,7 +262,11 @@ private fun ReviewPage(
         }
         if (saveError) item { Text(stringResource(R.string.ai_invalid_draft), color = MaterialTheme.colorScheme.error) }
         item {
-            Button(onClick = onConfirm, enabled = !saving && drafts.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
+            AppPrimaryButton(
+                onClick = onConfirm,
+                enabled = !saving && drafts.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 if (saving) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -271,11 +296,13 @@ private fun DraftCard(
     var expanded by rememberSaveable(draft.id) { mutableStateOf(true) }
     var typeMenuVisible by remember { mutableStateOf(false) }
     var pendingType by remember { mutableStateOf<ScheduleTypeWithSteps?>(null) }
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    var nextStepId by remember { mutableLongStateOf(-1L) }
+    val focusManager = LocalFocusManager.current
+    AppCard(Modifier.fillMaxWidth(), containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Column(Modifier.padding(AppSpacing.Content), verticalArrangement = Arrangement.spacedBy(AppSpacing.Compact)) {
             if (expanded) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
+                    AppOutlinedTextField(
                         draft.title,
                         { onChange(draft.copy(title = it)) },
                         Modifier.weight(1f),
@@ -299,7 +326,7 @@ private fun DraftCard(
                         onClick = { datePickerTarget = AiDateTarget.END },
                     )
                 }
-                OutlinedTextField(
+                AppOutlinedTextField(
                     draft.time,
                     { onChange(draft.copy(time = it)) },
                     Modifier.fillMaxWidth(),
@@ -307,7 +334,7 @@ private fun DraftCard(
                     singleLine = true,
                 )
                 androidx.compose.foundation.layout.Box {
-                    OutlinedTextField(
+                    AppOutlinedTextField(
                         draft.category,
                         { onChange(draft.copy(category = it)) },
                         Modifier.fillMaxWidth(),
@@ -350,27 +377,40 @@ private fun DraftCard(
                         }
                     }
                 }
-                OutlinedTextField(draft.note, { onChange(draft.copy(note = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.ai_note)) }, minLines = 2)
+                AppOutlinedTextField(draft.note, { onChange(draft.copy(note = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.ai_note)) }, minLines = 2)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.schedule_reminder_label), Modifier.weight(1f))
                     Switch(draft.reminderEnabled, { onChange(draft.copy(reminderEnabled = it)) })
                 }
-                if (draft.reminderEnabled) OutlinedTextField(draft.reminder, { onChange(draft.copy(reminder = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.ai_reminder_minutes)) }, singleLine = true)
+                if (draft.reminderEnabled) AppOutlinedTextField(draft.reminder, { onChange(draft.copy(reminder = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.ai_reminder_minutes)) }, singleLine = true)
                 Text(stringResource(R.string.production_steps), style = MaterialTheme.typography.titleSmall)
-                draft.steps.forEachIndexed { stepIndex, step ->
+                ReorderableColumn(
+                    items = draft.steps,
+                    onMove = { fromIndex, toIndex -> onChange(draft.copy(steps = draft.steps.moveItem(fromIndex, toIndex))) },
+                    onDragStart = { focusManager.clearFocus() },
+                ) { step, dragHandleModifier ->
+                    val stepIndex = draft.steps.indexOfFirst { it.id == step.id }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(step.isCompleted, { checked -> onChange(draft.copy(steps = draft.steps.mapIndexed { index, old -> if (index == stepIndex) old.copy(isCompleted = checked) else old })) })
-                        OutlinedTextField(step.title, { value -> onChange(draft.copy(steps = draft.steps.mapIndexed { index, old -> if (index == stepIndex) old.copy(title = value) else old })) }, Modifier.weight(1f), label = { Text(stringResource(R.string.step_name)) }, singleLine = true)
-                         IconButton(enabled = stepIndex > 0, onClick = {
-                             val reordered = draft.steps.toMutableList(); val previous = reordered[stepIndex - 1]; reordered[stepIndex - 1] = reordered[stepIndex]; reordered[stepIndex] = previous; onChange(draft.copy(steps = reordered))
-                         }) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = stringResource(R.string.move_step_up)) }
-                         IconButton(enabled = stepIndex < draft.steps.lastIndex, onClick = {
-                             val reordered = draft.steps.toMutableList(); val next = reordered[stepIndex + 1]; reordered[stepIndex + 1] = reordered[stepIndex]; reordered[stepIndex] = next; onChange(draft.copy(steps = reordered))
-                         }) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.move_step_down)) }
-                         TextButton(onClick = { onChange(draft.copy(steps = draft.steps.filterIndexed { index, _ -> index != stepIndex })) }) { Text(stringResource(R.string.delete_step)) }
+                        AppOutlinedTextField(
+                            value = step.title,
+                            onValueChange = { value -> onChange(draft.copy(steps = draft.steps.mapIndexed { index, old -> if (index == stepIndex) old.copy(title = value) else old })) },
+                            modifier = Modifier.weight(1f),
+                            label = { Text(stringResource(R.string.step_name)) },
+                            singleLine = true,
+                            trailingIcon = {
+                                Box(
+                                    modifier = dragHandleModifier.size(40.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(Icons.Default.DragHandle, contentDescription = stringResource(R.string.reorder_steps), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            },
+                        )
+                        TextButton(onClick = { onChange(draft.copy(steps = draft.steps.filterIndexed { index, _ -> index != stepIndex })) }) { Text(stringResource(R.string.delete_step)) }
                     }
                 }
-                TextButton(onClick = { onChange(draft.copy(steps = draft.steps + EditableAiStep(System.nanoTime(), "", false))) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.add_step)) }
+                TextButton(onClick = { onChange(draft.copy(steps = draft.steps + EditableAiStep(nextStepId--, "", false))) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.add_step)) }
                 Text(stringResource(R.string.ai_confidence, (draft.confidence * 100).toInt()), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
                 if (draft.uncertainties.isNotEmpty()) {
                     Text(stringResource(R.string.ai_uncertain_title), color = MaterialTheme.colorScheme.error)
