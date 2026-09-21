@@ -19,16 +19,20 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -230,4 +234,41 @@ fun AppValueRow(
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+@Composable
+fun AppTimePickerDialog(
+    title: String,
+    initialHour: Int,
+    initialMinute: Int,
+    confirmLabel: String,
+    cancelLabel: String,
+    onConfirm: (hour: Int, minute: Int) -> Unit,
+    onCancel: () -> Unit,
+    clearLabel: String? = null,
+    onClear: (() -> Unit)? = null,
+) {
+    val timePickerState = rememberTimePickerState(
+        initialHour = initialHour,
+        initialMinute = initialMinute,
+        is24Hour = true,
+    )
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(title) },
+        text = { TimePicker(state = timePickerState) },
+        dismissButton = {
+            Row {
+                if (clearLabel != null && onClear != null) {
+                    TextButton(onClick = onClear) { Text(clearLabel) }
+                }
+                TextButton(onClick = onCancel) { Text(cancelLabel) }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(timePickerState.hour, timePickerState.minute) }) {
+                Text(confirmLabel)
+            }
+        },
+    )
 }

@@ -8,6 +8,7 @@ import com.datenote.app.data.local.ScheduleStepEntity
 import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
 import com.datenote.app.domain.model.ScheduleStatus
+import com.datenote.app.domain.model.sortForAll
 import com.datenote.app.reminder.ReminderScheduler
 import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,7 +18,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-enum class ScheduleFilter { ALL, RECENT, TODAY, OVERDUE, COMPLETED }
+enum class ScheduleFilter { ALL, UNCOMPLETED, RECENT, TODAY, OVERDUE, COMPLETED }
 
 class AllSchedulesViewModel(
     private val repository: ScheduleRepository,
@@ -39,6 +40,7 @@ class AllSchedulesViewModel(
             .filter {
                 when (filter) {
                     ScheduleFilter.ALL -> true
+                    ScheduleFilter.UNCOMPLETED -> it.schedule.status != ScheduleStatus.COMPLETED
                     ScheduleFilter.RECENT -> it.schedule.status != ScheduleStatus.COMPLETED && it.schedule.startEpochDay <= today + 30 && it.schedule.endEpochDay >= today
                     ScheduleFilter.TODAY -> it.schedule.startEpochDay <= today && it.schedule.endEpochDay >= today
                     ScheduleFilter.OVERDUE -> it.schedule.status != ScheduleStatus.COMPLETED && it.schedule.endEpochDay < today
@@ -46,6 +48,7 @@ class AllSchedulesViewModel(
                 }
             }
             .toList()
+            .sortForAll(today)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun setFilter(value: ScheduleFilter) { selectedFilter.value = value }

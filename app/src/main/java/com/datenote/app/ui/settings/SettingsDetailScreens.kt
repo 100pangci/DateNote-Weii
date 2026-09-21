@@ -78,7 +78,9 @@ import com.datenote.app.reminder.ReminderSettings
 import com.datenote.app.ui.components.AppOutlinedTextField
 import com.datenote.app.ui.components.AppPrimaryButton
 import com.datenote.app.ui.components.AppSectionTitle
+import com.datenote.app.ui.components.AppTimePickerDialog
 import com.datenote.app.ui.components.AppTopAppBar
+import com.datenote.app.ui.components.AppValueRow
 import com.datenote.app.ui.theme.AppSpacing
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
@@ -258,7 +260,7 @@ fun SettingsRemindersScreen(
 ) {
     val viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory(preferencesRepository, keyStore, aiRepository, scheduleRepository, reminderScheduler))
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var timeText by remember(state.preferences.defaultReminderTimeMinutes) { mutableStateOf(minutesToTime(state.preferences.defaultReminderTimeMinutes)) }
+    var timePickerVisible by rememberSaveable { mutableStateOf(false) }
     SettingsDetailScaffold(stringResource(R.string.settings_reminders), onBack) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -280,19 +282,29 @@ fun SettingsRemindersScreen(
                 }
             }
             item {
-                AppOutlinedTextField(
-                    value = timeText,
-                    onValueChange = { value ->
-                        timeText = value
-                        parseTimeMinutes(value)?.let(viewModel::setDefaultReminderTime)
-                    },
+                AppValueRow(
+                    label = stringResource(R.string.default_reminder_time),
+                    value = minutesToTime(state.preferences.defaultReminderTimeMinutes),
+                    onClick = { timePickerVisible = true },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.default_reminder_time)) },
-                    supportingText = { Text(stringResource(R.string.time_format_hint)) },
-                    singleLine = true,
                 )
             }
         }
+    }
+    if (timePickerVisible) {
+        val initialTime = state.preferences.defaultReminderTimeMinutes
+        AppTimePickerDialog(
+            title = stringResource(R.string.default_reminder_time),
+            initialHour = initialTime / 60,
+            initialMinute = initialTime % 60,
+            confirmLabel = stringResource(R.string.confirm),
+            cancelLabel = stringResource(R.string.cancel),
+            onConfirm = { hour, minute ->
+                viewModel.setDefaultReminderTime(hour * 60 + minute)
+                timePickerVisible = false
+            },
+            onCancel = { timePickerVisible = false },
+        )
     }
 }
 
@@ -589,11 +601,3 @@ private fun themeLabel(mode: ThemeMode): String = when (mode) {
 }
 
 private fun minutesToTime(minutes: Int): String = "%02d:%02d".format(minutes / 60, minutes % 60)
-
-private fun parseTimeMinutes(value: String): Int? {
-    val parts = value.split(":")
-    if (parts.size != 2) return null
-    val hour = parts[0].toIntOrNull() ?: return null
-    val minute = parts[1].toIntOrNull() ?: return null
-    return if (hour in 0..23 && minute in 0..59) hour * 60 + minute else null
-}

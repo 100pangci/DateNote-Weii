@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -40,8 +41,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -75,6 +74,7 @@ import com.datenote.app.ui.components.AppCard
 import com.datenote.app.ui.components.AppOutlinedTextField
 import com.datenote.app.ui.components.AppPrimaryButton
 import com.datenote.app.ui.components.AppSectionTitle
+import com.datenote.app.ui.components.AppTimePickerDialog
 import com.datenote.app.ui.components.AppTopAppBar
 import com.datenote.app.ui.components.AppValueRow
 import com.datenote.app.ui.components.ReorderableColumn
@@ -117,8 +117,12 @@ fun ScheduleEditorScreen(
     var status by remember(schedule.id) { mutableStateOf(schedule.status) }
     var steps by remember(schedule.id) { mutableStateOf(state.steps) }
     var reminderEnabled by remember(schedule.id) { mutableStateOf(schedule.remindBeforeMinutes != null) }
+    var reminderText by remember(schedule.id) {
+        mutableStateOf((schedule.remindBeforeMinutes ?: defaultReminderMinutes.toLong()).toString())
+    }
     var titleSubmitted by rememberSaveable(schedule.id) { mutableStateOf(false) }
     var stepsSubmitted by rememberSaveable(schedule.id) { mutableStateOf(false) }
+    var reminderSubmitted by rememberSaveable(schedule.id) { mutableStateOf(false) }
     var datePickerTarget by rememberSaveable { mutableStateOf<DateTarget?>(null) }
     var typeMenuVisible by remember { mutableStateOf(false) }
     var pendingType by remember { mutableStateOf<ScheduleTypeWithSteps?>(null) }
@@ -136,6 +140,8 @@ fun ScheduleEditorScreen(
     val focusManager = LocalFocusManager.current
     val titleError = titleSubmitted && title.trim().isEmpty()
     val stepsError = stepsSubmitted && steps.any { it.title.trim().isEmpty() }
+    val reminderMinutes = reminderText.trim().toLongOrNull()?.takeIf { it in 0..43_200 }
+    val reminderError = reminderSubmitted && reminderEnabled && reminderMinutes == null
     val parsedTime = remember(timeText) { parseTime(timeText) }
     val focusRequester = remember { FocusRequester() }
 
@@ -341,21 +347,47 @@ fun ScheduleEditorScreen(
                     if (reminderEnabled) {
                         stringResource(
                             R.string.schedule_reminder_enabled_supporting,
-                            reminderDescription(schedule.remindBeforeMinutes ?: defaultReminderMinutes.toLong()),
+                            reminderDescription(reminderMinutes ?: defaultReminderMinutes.toLong()),
                         )
                     } else {
                         stringResource(R.string.schedule_reminder_disabled_supporting)
                     },
                 )
             },
-            trailingContent = { Switch(checked = reminderEnabled, onCheckedChange = { reminderEnabled = it }) },
+            trailingContent = {
+                Switch(
+                    checked = reminderEnabled,
+                    onCheckedChange = {
+                        reminderEnabled = it
+                        reminderSubmitted = false
+                    },
+                )
+            },
         )
+        if (reminderEnabled) {
+            AppOutlinedTextField(
+                value = reminderText,
+                onValueChange = {
+                    reminderText = it
+                    reminderSubmitted = false
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.schedule_reminder_minutes_label)) },
+                supportingText = {
+                    if (reminderError) Text(stringResource(R.string.schedule_reminder_minutes_invalid))
+                },
+                isError = reminderError,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+        }
         AppPrimaryButton(
             onClick = {
                 titleSubmitted = true
                 stepsSubmitted = true
+                reminderSubmitted = true
                 val normalizedSteps = steps.map { it.copy(title = it.title.trim()) }
-                if (title.trim().isNotEmpty() && startDate <= endDate && normalizedSteps.none { it.title.isEmpty() }) {
+                if (title.trim().isNotEmpty() && startDate <= endDate && normalizedSteps.none { it.title.isEmpty() } && (!reminderEnabled || reminderMinutes != null)) {
                     val updated = schedule.copy(
                         title = title,
                         note = note,
@@ -364,7 +396,7 @@ fun ScheduleEditorScreen(
                         endEpochDay = endDate.toEpochDay(),
                         minuteOfDay = parsedTime?.let { it.hour * 60 + it.minute },
                         status = status,
-                        remindBeforeMinutes = if (reminderEnabled) schedule.remindBeforeMinutes ?: defaultReminderMinutes.toLong() else null,
+                        remindBeforeMinutes = if (reminderEnabled) reminderMinutes else null,
                     )
                     val notificationAvailable = NotificationAccess.status(context).canPost
                     viewModel.save(updated, normalizedSteps) {
@@ -415,29 +447,21 @@ fun ScheduleEditorScreen(
     }
     if (timePickerVisible) {
         val initialTime = parsedTime ?: LocalTime.of(defaultReminderTimeMinutes / 60, defaultReminderTimeMinutes % 60)
-        val timePickerState = rememberTimePickerState(
+        AppTimePickerDialog(
+            title = stringResource(R.string.schedule_deadline_label),
             initialHour = initialTime.hour,
             initialMinute = initialTime.minute,
-            is24Hour = true,
-        )
-        AlertDialog(
-            onDismissRequest = { timePickerVisible = false },
-            title = { Text(stringResource(R.string.schedule_deadline_label)) },
-            text = { TimePicker(state = timePickerState) },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = {
-                        timeText = ""
-                        timePickerVisible = false
-                    }) { Text(stringResource(R.string.schedule_deadline_clear)) }
-                    TextButton(onClick = { timePickerVisible = false }) { Text(stringResource(R.string.cancel)) }
-                }
+            confirmLabel = stringResource(R.string.confirm),
+            cancelLabel = stringResource(R.string.cancel),
+            clearLabel = stringResource(R.string.schedule_deadline_clear),
+            onConfirm = { hour, minute ->
+                timeText = "%02d:%02d".format(hour, minute)
+                timePickerVisible = false
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    timeText = "%02d:%02d".format(timePickerState.hour, timePickerState.minute)
-                    timePickerVisible = false
-                }) { Text(stringResource(R.string.confirm)) }
+            onCancel = { timePickerVisible = false },
+            onClear = {
+                timeText = ""
+                timePickerVisible = false
             },
         )
     }

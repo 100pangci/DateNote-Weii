@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -68,6 +69,7 @@ fun AllSchedulesScreen(
         ScheduleFilter.RECENT to R.string.all_filter_recent,
         ScheduleFilter.TODAY to R.string.all_filter_today,
         ScheduleFilter.OVERDUE to R.string.all_filter_overdue,
+        ScheduleFilter.UNCOMPLETED to R.string.all_filter_uncompleted,
         ScheduleFilter.COMPLETED to R.string.all_filter_completed,
     )
 
@@ -107,6 +109,7 @@ fun AllSchedulesScreen(
                 androidx.compose.foundation.layout.Row(
                     Modifier
                         .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.large)
                         .horizontalScroll(rememberScrollState())
                         .padding(horizontal = AppSpacing.Tight, vertical = AppSpacing.Hairline),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -198,6 +201,7 @@ fun AllSchedulesScreen(
 
 private fun filterLabel(filter: ScheduleFilter): Int = when (filter) {
     ScheduleFilter.ALL -> R.string.all_filter_all
+    ScheduleFilter.UNCOMPLETED -> R.string.all_filter_uncompleted
     ScheduleFilter.RECENT -> R.string.all_filter_recent
     ScheduleFilter.TODAY -> R.string.all_filter_today
     ScheduleFilter.OVERDUE -> R.string.all_filter_overdue
@@ -209,6 +213,7 @@ private fun EmptyAllState(filter: ScheduleFilter, query: String) {
     val search = query.isNotBlank()
     Column(Modifier.fillMaxWidth().padding(top = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(if (search) stringResource(R.string.search_empty_title) else when (filter) {
+            ScheduleFilter.UNCOMPLETED -> stringResource(R.string.uncompleted_empty_title)
             ScheduleFilter.RECENT -> stringResource(R.string.recent_empty_title)
             ScheduleFilter.TODAY -> stringResource(R.string.today_empty_title)
             ScheduleFilter.OVERDUE -> stringResource(R.string.overdue_empty_title)
@@ -216,6 +221,7 @@ private fun EmptyAllState(filter: ScheduleFilter, query: String) {
             ScheduleFilter.ALL -> stringResource(R.string.recent_empty_title)
         }, style = MaterialTheme.typography.titleMedium)
         Text(if (search) stringResource(R.string.search_empty_message) else when (filter) {
+            ScheduleFilter.UNCOMPLETED -> stringResource(R.string.uncompleted_empty_message)
             ScheduleFilter.RECENT -> stringResource(R.string.recent_empty_message)
             ScheduleFilter.TODAY -> stringResource(R.string.today_empty_message)
             ScheduleFilter.OVERDUE -> stringResource(R.string.overdue_empty_message)

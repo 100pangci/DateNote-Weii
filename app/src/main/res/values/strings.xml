@@ -81,6 +81,8 @@
     <string name="schedule_reminder_label">到期提醒</string>
     <string name="schedule_reminder_enabled_supporting">在这项安排到期前通知你 · %1$s</string>
     <string name="schedule_reminder_disabled_supporting">关闭后不会发送这项安排的到期通知</string>
+    <string name="schedule_reminder_minutes_label">提前提醒分钟数</string>
+    <string name="schedule_reminder_minutes_invalid">请输入 0～43200 之间的分钟数</string>
     <string name="reminder_before_minutes">提前 %1$d 分钟提醒</string>
     <string name="reminder_before_hours">提前 %1$d 小时提醒</string>
     <string name="reminder_before_days">提前 %1$d 天提醒</string>
@@ -116,6 +118,7 @@
     <string name="today_due">就是今天</string>
     <string name="days_overdue">已逾期 %1$d 天</string>
     <string name="all_filter_all">全部</string>
+    <string name="all_filter_uncompleted">未完成</string>
     <string name="all_filter_recent">最近</string>
     <string name="all_filter_today">今天</string>
     <string name="all_filter_overdue">已逾期</string>
@@ -126,6 +129,8 @@
     <string name="schedules_count">共 %1$d 条安排</string>
     <string name="recent_empty_title">最近没有要赶的事情</string>
     <string name="recent_empty_message">可以慢慢来啦</string>
+    <string name="uncompleted_empty_title">没有未完成的安排</string>
+    <string name="uncompleted_empty_message">可以安心啦</string>
     <string name="today_empty_title">今天没有安排</string>
     <string name="today_empty_message">可以轻松一点啦</string>
     <string name="overdue_empty_title">没有逾期的事情</string>

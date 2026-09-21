@@ -5,10 +5,15 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,25 +42,36 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import com.datenote.app.R
 import com.datenote.app.data.local.ScheduleEntity
 import com.datenote.app.data.local.ScheduleStepEntity
@@ -65,6 +81,10 @@ import com.datenote.app.domain.model.isOverdue
 import com.datenote.app.domain.model.progress
 import com.datenote.app.ui.theme.AppSpacing
 import java.time.LocalDate
+import kotlinx.coroutines.delay
+
+private const val MenuEnterDuration = 190
+private const val MenuExitDuration = 140
 
 /**
  * The single schedule card used by both the home day list and the all-schedules list.
@@ -452,6 +472,31 @@ private fun ScheduleMoreMenu(
     onPostpone: (Long) -> Unit,
     onDelete: () -> Unit,
 ) {
+    var opensDown by remember { mutableStateOf(true) }
+    var popupMounted by remember { mutableStateOf(false) }
+    val menuTransition = remember { MutableTransitionState(false) }
+    val density = LocalDensity.current
+    val positionProvider = remember(density) {
+        ScheduleMenuPositionProvider(
+            verticalMargin = with(density) { 48.dp.roundToPx() },
+            onPositionCalculated = { opensDown = it },
+        )
+    }
+    val menuActions = if (opensDown) {
+        ScheduleMenuAction.entries.toList()
+    } else {
+        ScheduleMenuAction.entries.reversed()
+    }
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            popupMounted = true
+            menuTransition.targetState = true
+        } else if (popupMounted) {
+            menuTransition.targetState = false
+            delay(MenuExitDuration.toLong())
+            popupMounted = false
+        }
+    }
     Box {
         IconButton(
             modifier = Modifier.size(48.dp),
@@ -463,63 +508,133 @@ private fun ScheduleMoreMenu(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { onExpandChange(false) },
-            modifier = Modifier.widthIn(max = 240.dp),
-        ) {
-            DropdownMenuItem(
-                modifier = Modifier.heightIn(min = 48.dp),
-                contentPadding = PaddingValues(horizontal = AppSpacing.Content),
-                text = { Text(stringResource(R.string.edit_schedule)) },
-                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                onClick = {
-                    onExpandChange(false)
-                    onEdit()
-                },
-            )
-            DropdownMenuItem(
-                modifier = Modifier.heightIn(min = 48.dp),
-                contentPadding = PaddingValues(horizontal = AppSpacing.Content),
-                text = { Text(stringResource(if (completed) R.string.mark_todo else R.string.mark_completed)) },
-                leadingIcon = { Icon(Icons.Default.Check, contentDescription = null) },
-                onClick = {
-                    onExpandChange(false)
-                    onToggleCompleted()
-                },
-            )
-            DropdownMenuItem(
-                modifier = Modifier.heightIn(min = 48.dp),
-                contentPadding = PaddingValues(horizontal = AppSpacing.Content),
-                text = { Text(stringResource(R.string.postpone_one_day)) },
-                leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null) },
-                onClick = {
-                    onExpandChange(false)
-                    onPostpone(1)
-                },
-            )
-            DropdownMenuItem(
-                modifier = Modifier.heightIn(min = 48.dp),
-                contentPadding = PaddingValues(horizontal = AppSpacing.Content),
-                text = { Text(stringResource(R.string.postpone_one_week)) },
-                leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null) },
-                onClick = {
-                    onExpandChange(false)
-                    onPostpone(7)
-                },
-            )
-            DropdownMenuItem(
-                modifier = Modifier.heightIn(min = 48.dp),
-                contentPadding = PaddingValues(horizontal = AppSpacing.Content),
-                text = { Text(stringResource(R.string.delete_schedule), color = MaterialTheme.colorScheme.error) },
-                leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                onClick = {
-                    onExpandChange(false)
-                    onDelete()
-                },
-            )
+        if (popupMounted) {
+            Popup(
+                popupPositionProvider = positionProvider,
+                onDismissRequest = { onExpandChange(false) },
+                properties = PopupProperties(focusable = true),
+            ) {
+                AnimatedVisibility(
+                    visibleState = menuTransition,
+                    enter = fadeIn(tween(MenuEnterDuration, easing = FastOutSlowInEasing)) + scaleIn(
+                        animationSpec = tween(MenuEnterDuration, easing = FastOutSlowInEasing),
+                        initialScale = 0.92f,
+                        transformOrigin = TransformOrigin(1f, if (opensDown) 0f else 1f),
+                    ),
+                    exit = fadeOut(tween(MenuExitDuration, easing = FastOutSlowInEasing)) + scaleOut(
+                        animationSpec = tween(MenuExitDuration, easing = FastOutSlowInEasing),
+                        targetScale = 0.96f,
+                        transformOrigin = TransformOrigin(1f, if (opensDown) 0f else 1f),
+                    ),
+                ) {
+                    Surface(
+                        modifier = Modifier.widthIn(max = 240.dp),
+                        shape = MaterialTheme.shapes.extraLarge,
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        tonalElevation = 3.dp,
+                        shadowElevation = 3.dp,
+                    ) {
+                        Column(Modifier.padding(vertical = 8.dp)) {
+                            menuActions.forEach { action ->
+                                when (action) {
+                    ScheduleMenuAction.DELETE -> DropdownMenuItem(
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        contentPadding = PaddingValues(horizontal = AppSpacing.Content),
+                        text = { Text(stringResource(R.string.delete_schedule), color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                        onClick = {
+                            onExpandChange(false)
+                            onDelete()
+                        },
+                    )
+
+                    ScheduleMenuAction.EDIT -> DropdownMenuItem(
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        contentPadding = PaddingValues(horizontal = AppSpacing.Content),
+                        text = { Text(stringResource(R.string.edit_schedule)) },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                        onClick = {
+                            onExpandChange(false)
+                            onEdit()
+                        },
+                    )
+
+                    ScheduleMenuAction.TOGGLE_COMPLETED -> DropdownMenuItem(
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        contentPadding = PaddingValues(horizontal = AppSpacing.Content),
+                        text = { Text(stringResource(if (completed) R.string.mark_todo else R.string.mark_completed)) },
+                        leadingIcon = { Icon(Icons.Default.Check, contentDescription = null) },
+                        onClick = {
+                            onExpandChange(false)
+                            onToggleCompleted()
+                        },
+                    )
+
+                    ScheduleMenuAction.POSTPONE_DAY -> DropdownMenuItem(
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        contentPadding = PaddingValues(horizontal = AppSpacing.Content),
+                        text = { Text(stringResource(R.string.postpone_one_day)) },
+                        leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null) },
+                        onClick = {
+                            onExpandChange(false)
+                            onPostpone(1)
+                        },
+                    )
+
+                    ScheduleMenuAction.POSTPONE_WEEK -> DropdownMenuItem(
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        contentPadding = PaddingValues(horizontal = AppSpacing.Content),
+                        text = { Text(stringResource(R.string.postpone_one_week)) },
+                        leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null) },
+                        onClick = {
+                            onExpandChange(false)
+                            onPostpone(7)
+                        },
+                    )
+                }
+                        }
+                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+private class ScheduleMenuPositionProvider(
+    private val verticalMargin: Int,
+    private val onPositionCalculated: (opensDown: Boolean) -> Unit,
+) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset {
+        val maxX = (windowSize.width - popupContentSize.width).coerceAtLeast(0)
+        val x = if (layoutDirection == LayoutDirection.Ltr) {
+            (anchorBounds.right - popupContentSize.width).coerceIn(0, maxX)
+        } else {
+            anchorBounds.left.coerceIn(0, maxX)
         }
+        val downY = anchorBounds.bottom
+        val upY = anchorBounds.top - popupContentSize.height
+        val (y, opensDown) = when {
+            downY >= verticalMargin && downY + popupContentSize.height <= windowSize.height - verticalMargin -> downY to true
+            upY >= verticalMargin && upY + popupContentSize.height <= windowSize.height - verticalMargin -> upY to false
+            anchorBounds.center.y < windowSize.height / 2 -> verticalMargin to true
+            else -> (windowSize.height - popupContentSize.height - verticalMargin).coerceAtLeast(verticalMargin) to false
+        }
+        onPositionCalculated(opensDown)
+        return IntOffset(x, y)
     }
+}
+
+private enum class ScheduleMenuAction {
+    DELETE,
+    EDIT,
+    TOGGLE_COMPLETED,
+    POSTPONE_DAY,
+    POSTPONE_WEEK,
 }
 
 @Composable

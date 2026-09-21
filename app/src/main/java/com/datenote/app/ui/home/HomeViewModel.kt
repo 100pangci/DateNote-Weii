@@ -8,6 +8,7 @@ import com.datenote.app.data.local.ScheduleStepEntity
 import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
 import com.datenote.app.domain.model.ScheduleStatus
+import com.datenote.app.domain.model.sortForHome
 import com.datenote.app.reminder.ReminderScheduler
 import java.time.LocalDate
 import java.time.YearMonth
@@ -53,7 +54,7 @@ class HomeViewModel(
             schedules.filter { schedule ->
                 schedule.schedule.startEpochDay <= epochDay && schedule.schedule.endEpochDay >= epochDay
             }
-        }.orEmpty()
+        }.orEmpty().sortForHome()
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
