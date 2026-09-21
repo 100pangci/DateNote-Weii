@@ -6,16 +6,23 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.layout.Column
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Check
@@ -30,22 +37,19 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -70,6 +74,7 @@ import java.time.LocalDate
 fun ExpandableScheduleCard(
     schedule: ScheduleWithSteps,
     defaultExpandSteps: Boolean,
+    autoCollapseCompletedSteps: Boolean,
     onEdit: () -> Unit,
     onToggleCompleted: () -> Unit,
     onToggleStep: (ScheduleStepEntity) -> Unit,
@@ -78,12 +83,16 @@ fun ExpandableScheduleCard(
 ) {
     val entity = schedule.schedule
     val hasSteps = schedule.progress.hasSteps
-    var expanded by rememberSaveable(entity.id, defaultExpandSteps, hasSteps) {
-        mutableStateOf(defaultExpandSteps && hasSteps)
+    val completed = entity.status == ScheduleStatus.COMPLETED
+    var expanded by rememberSaveable(entity.id, defaultExpandSteps, autoCollapseCompletedSteps, hasSteps, completed) {
+        mutableStateOf(defaultExpandSteps && hasSteps && (!completed || !autoCollapseCompletedSteps))
     }
     var menuExpanded by rememberSaveable(entity.id, "menu") { mutableStateOf(false) }
     val overdue = isOverdue(entity, LocalDate.now())
-    val completed = entity.status == ScheduleStatus.COMPLETED
+    val toggleCompletedAndCollapse = {
+        if (autoCollapseCompletedSteps) expanded = false
+        onToggleCompleted()
+    }
     val animatedProgress by animateFloatAsState(
         targetValue = schedule.progress.fraction,
         animationSpec = spring(
@@ -107,106 +116,71 @@ fun ExpandableScheduleCard(
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        Column {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = AppSpacing.Content,
+                    vertical = AppSpacing.CardVertical,
+                ),
+        ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = AppSpacing.Tight, top = AppSpacing.Hairline, bottom = AppSpacing.Hairline, end = AppSpacing.Hairline),
-                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(AppSpacing.CardColumnGap),
             ) {
-                Checkbox(
-                    checked = completed,
-                    modifier = Modifier.size(48.dp),
-                    onCheckedChange = { onToggleCompleted() },
-                )
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = AppSpacing.Hairline),
-                    verticalArrangement = Arrangement.spacedBy(1.dp),
+                Box(
+                    modifier = Modifier.width(AppSpacing.CardLeading),
+                    contentAlignment = Alignment.TopCenter,
                 ) {
-                    Text(
-                        text = entity.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+                    Checkbox(
+                        checked = completed,
+                        modifier = Modifier.size(AppSpacing.CardLeading),
+                        onCheckedChange = { toggleCompletedAndCollapse() },
                     )
-                    Text(
-                        text = dateSummary(entity),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        softWrap = true,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    val detail = buildString {
-                        entity.minuteOfDay?.let { append("%02d:%02d".format(it / 60, it % 60)) }
-                        if (entity.minuteOfDay != null && entity.category != null) append(" · ")
-                        entity.category?.let(::append)
-                    }
-                    if (detail.isNotBlank()) {
-                        Text(
-                            text = detail,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    Row(
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    ScheduleCardInfo(
+                        schedule = schedule,
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text(
-                            text = scheduleProgressText(schedule),
-                            modifier = Modifier.weight(1f),
-                            color = if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                             style = MaterialTheme.typography.labelMedium,
-                            maxLines = 2,
-                            softWrap = true,
-                        )
-                        if (entity.remindBeforeMinutes != null) {
-                            Icon(
-                                imageVector = Icons.Default.Alarm,
-                                contentDescription = stringResource(R.string.reminder_enabled),
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                    }
-                    if (hasSteps) {
-                        Text(
-                            text = stringResource(R.string.progress_completed, schedule.progress.completedCount, schedule.progress.totalCount),
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                        LinearProgressIndicator(
-                            progress = { animatedProgress.coerceIn(0f, 1f) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = AppSpacing.Hairline),
-                        )
-                    }
+                    )
                 }
-                if (hasSteps) {
-                    IconButton(
-                        modifier = Modifier.size(48.dp),
-                        onClick = { expanded = !expanded },
-                    ) {
-                        Icon(
-                            imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = stringResource(
-                                if (expanded) R.string.collapse_steps else R.string.expand_steps,
-                            ),
-                        )
-                    }
-                }
-                ScheduleMoreMenu(
-                    expanded = menuExpanded,
+                ScheduleCardActions(
+                    hasSteps = hasSteps,
+                    expanded = expanded,
                     completed = completed,
-                    onExpandChange = { menuExpanded = it },
+                    menuExpanded = menuExpanded,
+                    onToggleExpanded = { expanded = !expanded },
+                    onMenuExpandChange = { menuExpanded = it },
                     onEdit = onEdit,
-                    onToggleCompleted = onToggleCompleted,
+                    onToggleCompleted = toggleCompletedAndCollapse,
                     onPostpone = onPostpone,
                     onDelete = onDelete,
+                )
+            }
+            ScheduleCardMeta(
+                schedule = schedule,
+                overdue = overdue,
+                completed = completed,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = AppSpacing.CardLeading + AppSpacing.CardColumnGap,
+                        top = AppSpacing.CardSection,
+                    ),
+            )
+            if (hasSteps) {
+                LinearProgressIndicator(
+                    progress = { animatedProgress.coerceIn(0f, 1f) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            top = AppSpacing.CardSection,
+                        )
+                        .height(AppSpacing.ProgressHeight)
+                        .clip(CircleShape),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
                 )
             }
             AnimatedVisibility(
@@ -214,42 +188,237 @@ fun ExpandableScheduleCard(
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut(),
             ) {
-                Column(
+                ScheduleStepsSection(
+                    steps = schedule.orderedSteps,
+                    onToggleStep = onToggleStep,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = AppSpacing.Content, end = AppSpacing.Tight, bottom = AppSpacing.Hairline),
-                ) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
-                    schedule.orderedSteps.forEach { step ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Checkbox(
-                                checked = step.isCompleted,
-                                modifier = Modifier.size(48.dp),
-                                onCheckedChange = { checked ->
-                                    if (checked != step.isCompleted) onToggleStep(step)
-                                },
-                            )
-                            Text(
-                                text = step.title,
-                                modifier = Modifier.weight(1f),
-                                color = if (step.isCompleted) {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                },
-                                textDecoration = if (step.isCompleted) TextDecoration.LineThrough else null,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                        }
-                    }
-                }
+                        .padding(top = AppSpacing.CardSection),
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun ScheduleCardInfo(
+    schedule: ScheduleWithSteps,
+    modifier: Modifier = Modifier,
+) {
+    val entity = schedule.schedule
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(AppSpacing.Hairline),
+    ) {
+        Text(
+            text = entity.title,
+            modifier = Modifier.weight(1f, fill = false),
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        entity.category
+            ?.takeIf { it.isNotBlank() }
+            ?.let { category ->
+                ScheduleTypeChip(label = category)
+            }
+        if (entity.remindBeforeMinutes != null) {
+            Box(
+                modifier = Modifier.size(AppSpacing.CardActionSlot),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Alarm,
+                    contentDescription = stringResource(R.string.reminder_enabled),
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScheduleCardMeta(
+    schedule: ScheduleWithSteps,
+    overdue: Boolean,
+    completed: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val entity = schedule.schedule
+    val dateLine = dateSummary(entity) + entity.minuteOfDay?.let {
+        " · %02d:%02d".format(it / 60, it % 60)
+    }.orEmpty()
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.CardSection),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AppSpacing.Hairline),
+        ) {
+            Text(
+                text = dateLine,
+                modifier = Modifier.weight(1f, fill = false),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (overdue || completed) {
+                ScheduleStatusChip(
+                    text = scheduleProgressText(schedule),
+                    overdue = overdue,
+                )
+            }
+        }
+        if (!overdue && !completed) {
+            Text(
+                text = scheduleProgressText(schedule),
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ScheduleStatusChip(
+    text: String,
+    overdue: Boolean,
+) {
+    val containerColor = if (overdue) {
+        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f)
+    } else {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+    }
+    val contentColor = if (overdue) {
+        MaterialTheme.colorScheme.onErrorContainer
+    } else {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    }
+    Box(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(containerColor)
+            .padding(
+                horizontal = AppSpacing.ChipHorizontal,
+                vertical = AppSpacing.ChipVertical,
+            ),
+    ) {
+        Text(
+            text = text,
+            color = contentColor,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun ScheduleCardActions(
+    hasSteps: Boolean,
+    expanded: Boolean,
+    completed: Boolean,
+    menuExpanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onMenuExpandChange: (Boolean) -> Unit,
+    onEdit: () -> Unit,
+    onToggleCompleted: () -> Unit,
+    onPostpone: (Long) -> Unit,
+    onDelete: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(AppSpacing.Hairline),
+    ) {
+        if (hasSteps) {
+            IconButton(
+                modifier = Modifier.size(48.dp),
+                onClick = onToggleExpanded,
+            ) {
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = stringResource(
+                        if (expanded) R.string.collapse_steps else R.string.expand_steps,
+                    ),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        ScheduleMoreMenu(
+            expanded = menuExpanded,
+            completed = completed,
+            onExpandChange = onMenuExpandChange,
+            onEdit = onEdit,
+            onToggleCompleted = onToggleCompleted,
+            onPostpone = onPostpone,
+            onDelete = onDelete,
+        )
+    }
+}
+
+@Composable
+private fun ScheduleStepsSection(
+    steps: List<ScheduleStepEntity>,
+    onToggleStep: (ScheduleStepEntity) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+            .padding(
+                horizontal = AppSpacing.StepGroupHorizontal,
+                vertical = AppSpacing.StepGroupVertical,
+            ),
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.StepRowGap),
+    ) {
+        steps.forEach { step ->
+            ScheduleStepItem(
+                step = step,
+                onToggle = { checked ->
+                    if (checked != step.isCompleted) onToggleStep(step)
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ScheduleStepItem(
+    step: ScheduleStepEntity,
+    onToggle: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(
+            checked = step.isCompleted,
+            modifier = Modifier.size(AppSpacing.CardLeading),
+            onCheckedChange = onToggle,
+        )
+        Text(
+            text = step.title,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = AppSpacing.CardColumnGap),
+            color = if (step.isCompleted) {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+            textDecoration = if (step.isCompleted) TextDecoration.LineThrough else null,
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 
@@ -271,6 +440,7 @@ private fun ScheduleMoreMenu(
             Icon(
                 imageVector = Icons.Default.MoreVert,
                 contentDescription = stringResource(R.string.schedule_more),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         DropdownMenu(

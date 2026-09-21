@@ -164,7 +164,9 @@
     <string name="settings_personalization">称呼与个性化</string>
     <string name="settings_schedule_cards">排期卡片</string>
     <string name="default_expand_steps">默认展开制作进度</string>
-    <string name="default_expand_steps_support">打开排期页面时直接显示制作步骤</string>
+    <string name="default_expand_steps_support">打开排期页面时直接显示未完成安排的制作步骤</string>
+    <string name="auto_collapse_completed_steps">完成后自动收起制作步骤</string>
+    <string name="auto_collapse_completed_steps_support">勾选母项目完成后自动收起，已完成安排默认保持收起</string>
     <string name="settings_schedule_types">排期类型</string>
     <string name="settings_schedule_types_summary">管理类型和默认制作步骤</string>
     <string name="settings_ai">智能小助手</string>

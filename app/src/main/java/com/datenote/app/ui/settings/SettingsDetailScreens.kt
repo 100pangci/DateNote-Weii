@@ -157,6 +157,19 @@ fun SettingsPersonalizationScreen(
                     },
                 )
             }
+            item {
+                ListItem(
+                    modifier = Modifier.clickable { viewModel.setAutoCollapseCompletedSteps(!state.preferences.autoCollapseCompletedSteps) },
+                    headlineContent = { Text(stringResource(R.string.auto_collapse_completed_steps), style = MaterialTheme.typography.titleMedium) },
+                    supportingContent = { Text(stringResource(R.string.auto_collapse_completed_steps_support), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    trailingContent = {
+                        Switch(
+                            checked = state.preferences.autoCollapseCompletedSteps,
+                            onCheckedChange = viewModel::setAutoCollapseCompletedSteps,
+                        )
+                    },
+                )
+            }
         }
     }
     if (nicknameDialog) {

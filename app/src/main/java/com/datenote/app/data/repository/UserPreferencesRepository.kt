@@ -22,6 +22,7 @@ data class UserPreferences(
     val defaultReminderMinutes: Int = 24 * 60,
     val defaultReminderTimeMinutes: Int = 9 * 60,
     val defaultExpandSteps: Boolean = true,
+    val autoCollapseCompletedSteps: Boolean = true,
     val aiBaseUrl: String = "https://api.openai.com/v1",
     val aiModel: String = "gpt-4o-mini",
 )
@@ -36,6 +37,7 @@ class UserPreferencesRepository(private val context: Context) {
         val defaultReminderMinutes = intPreferencesKey("default_reminder_minutes")
         val defaultReminderTimeMinutes = intPreferencesKey("default_reminder_time_minutes")
         val defaultExpandSteps = booleanPreferencesKey("default_expand_steps")
+        val autoCollapseCompletedSteps = booleanPreferencesKey("auto_collapse_completed_steps")
         val aiBaseUrl = stringPreferencesKey("ai_base_url")
         val aiModel = stringPreferencesKey("ai_model")
     }
@@ -52,6 +54,7 @@ class UserPreferencesRepository(private val context: Context) {
             defaultReminderMinutes = values[Keys.defaultReminderMinutes] ?: 24 * 60,
             defaultReminderTimeMinutes = values[Keys.defaultReminderTimeMinutes] ?: 9 * 60,
             defaultExpandSteps = values[Keys.defaultExpandSteps] ?: true,
+            autoCollapseCompletedSteps = values[Keys.autoCollapseCompletedSteps] ?: true,
             aiBaseUrl = values[Keys.aiBaseUrl] ?: "https://api.openai.com/v1",
             aiModel = values[Keys.aiModel] ?: "gpt-4o-mini",
         )
@@ -87,6 +90,10 @@ class UserPreferencesRepository(private val context: Context) {
 
     suspend fun setDefaultExpandSteps(enabled: Boolean) {
         context.userPreferencesDataStore.edit { it[Keys.defaultExpandSteps] = enabled }
+    }
+
+    suspend fun setAutoCollapseCompletedSteps(enabled: Boolean) {
+        context.userPreferencesDataStore.edit { it[Keys.autoCollapseCompletedSteps] = enabled }
     }
 
     suspend fun setAiBaseUrl(url: String) {

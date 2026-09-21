@@ -151,12 +151,13 @@ fun MainShell(
                     reminderScheduler = reminderScheduler,
                     defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes,
                     defaultExpandSteps = preferences.defaultExpandSteps,
+                    autoCollapseCompletedSteps = preferences.autoCollapseCompletedSteps,
                     showWelcome = showWelcome,
                     onAdd = { navController.navigate(AddRoute) },
                     onEdit = { navController.navigate("schedule/$it") },
                 )
             }
-            composable(AllRoute, enterTransition = topLevelEnter, exitTransition = topLevelExit) { AllSchedulesScreen(repository = repository, reminderScheduler = reminderScheduler, defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes, defaultExpandSteps = preferences.defaultExpandSteps, onEdit = { navController.navigate("schedule/$it") }) }
+            composable(AllRoute, enterTransition = topLevelEnter, exitTransition = topLevelExit) { AllSchedulesScreen(repository = repository, reminderScheduler = reminderScheduler, defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes, defaultExpandSteps = preferences.defaultExpandSteps, autoCollapseCompletedSteps = preferences.autoCollapseCompletedSteps, onEdit = { navController.navigate("schedule/$it") }) }
             composable(AiRoute, enterTransition = topLevelEnter, exitTransition = topLevelExit) { AiInputScreen(aiRepository = aiRepository, repository = repository, defaultReminderMinutes = preferences.defaultReminderMinutes, reminderScheduler = reminderScheduler, defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes, onRequestNotifications = onRequestNotifications) }
             composable(SettingsRoute, enterTransition = topLevelEnter, exitTransition = topLevelExit) {
                 SettingsScreen(

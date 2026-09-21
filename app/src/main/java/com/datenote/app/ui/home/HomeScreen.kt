@@ -71,6 +71,7 @@ fun HomeScreen(
     reminderScheduler: ReminderScheduler,
     defaultReminderTimeMinutes: Int,
     defaultExpandSteps: Boolean,
+    autoCollapseCompletedSteps: Boolean,
     showWelcome: Boolean,
     onAdd: () -> Unit,
     onEdit: (Long) -> Unit,
@@ -134,6 +135,7 @@ fun HomeScreen(
                     ExpandableScheduleCard(
                         schedule = schedule,
                         defaultExpandSteps = defaultExpandSteps,
+                        autoCollapseCompletedSteps = autoCollapseCompletedSteps,
                         onEdit = { onEdit(schedule.schedule.id) },
                         onToggleCompleted = {
                             if (schedule.schedule.status == ScheduleStatus.COMPLETED) {

@@ -55,6 +55,7 @@ class SettingsViewModel(
     fun setDefaultReminder(value: Int) { viewModelScope.launch { preferencesRepository.setDefaultReminderMinutes(value) } }
     fun setDefaultReminderTime(value: Int) { viewModelScope.launch { preferencesRepository.setDefaultReminderTimeMinutes(value) } }
     fun setDefaultExpandSteps(value: Boolean) { viewModelScope.launch { preferencesRepository.setDefaultExpandSteps(value) } }
+    fun setAutoCollapseCompletedSteps(value: Boolean) { viewModelScope.launch { preferencesRepository.setAutoCollapseCompletedSteps(value) } }
 
     fun refreshReliability(context: Context) {
         _state.value = _state.value.copy(reliability = NotificationAccess.reliability(context))

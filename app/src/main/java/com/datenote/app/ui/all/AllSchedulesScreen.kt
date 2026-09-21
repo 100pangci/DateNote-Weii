@@ -54,6 +54,7 @@ fun AllSchedulesScreen(
     reminderScheduler: ReminderScheduler,
     defaultReminderTimeMinutes: Int,
     defaultExpandSteps: Boolean,
+    autoCollapseCompletedSteps: Boolean,
     onEdit: (Long) -> Unit,
 ) {
     val viewModel: AllSchedulesViewModel = viewModel(factory = AllSchedulesViewModel.Factory(repository, reminderScheduler, defaultReminderTimeMinutes))
@@ -159,6 +160,7 @@ fun AllSchedulesScreen(
                         ExpandableScheduleCard(
                             schedule = schedule,
                             defaultExpandSteps = defaultExpandSteps,
+                            autoCollapseCompletedSteps = autoCollapseCompletedSteps,
                             onEdit = { onEdit(schedule.schedule.id) },
                             onToggleCompleted = {
                                 if (schedule.schedule.status == ScheduleStatus.COMPLETED) viewModel.toggleCompleted(schedule)
