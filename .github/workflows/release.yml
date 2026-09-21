@@ -82,9 +82,29 @@ jobs:
       - name: Prepare release asset
         run: cp app/build/outputs/apk/release/app-release.apk "维来可期-${GITHUB_REF_NAME}.apk"
 
+      - name: Prepare release notes
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          awk -v version="$TAG_NAME" '
+            /^## / {
+              is_target = ($0 == "## " version || index($0, "## " version " ") == 1)
+              if (is_target) {
+                found = 1
+              } else if (found) {
+                exit
+              }
+            }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          test -s release-notes.md || {
+            echo "No changelog section found for $TAG_NAME"
+            exit 1
+          }
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          body_path: CHANGELOG.md
+          body_path: release-notes.md
           files: 维来可期-${{ github.ref_name }}.apk
           generate_release_notes: false
