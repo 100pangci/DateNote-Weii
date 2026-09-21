@@ -2,6 +2,7 @@ package com.datenote.app.ui.editor
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,14 +35,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,8 +58,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.width
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.datenote.app.R
@@ -67,7 +67,6 @@ import com.datenote.app.data.local.ScheduleEntity
 import com.datenote.app.data.local.ScheduleStepEntity
 import com.datenote.app.data.local.ScheduleTypeWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
-import com.datenote.app.domain.model.ScheduleStatus
 import com.datenote.app.domain.model.statusAfterStepChange
 import com.datenote.app.reminder.NotificationAccess
 import com.datenote.app.reminder.ReminderScheduler
@@ -123,8 +122,8 @@ fun ScheduleEditorScreen(
     var datePickerTarget by rememberSaveable { mutableStateOf<DateTarget?>(null) }
     var typeMenuVisible by remember { mutableStateOf(false) }
     var pendingType by remember { mutableStateOf<ScheduleTypeWithSteps?>(null) }
-    var completionDialogVisible by remember { mutableStateOf(false) }
     var notificationUnavailable by rememberSaveable(schedule.id) { mutableStateOf(false) }
+    var timePickerVisible by rememberSaveable(schedule.id) { mutableStateOf(false) }
     // Stable row ids for unsaved steps, which all share the database id 0.
     val transientStepIds = remember(schedule.id) { mutableMapOf<ScheduleStepEntity, Long>() }
     var nextTransientStepId by remember(schedule.id) { mutableLongStateOf(-1L) }
@@ -138,7 +137,6 @@ fun ScheduleEditorScreen(
     val titleError = titleSubmitted && title.trim().isEmpty()
     val stepsError = stepsSubmitted && steps.any { it.title.trim().isEmpty() }
     val parsedTime = remember(timeText) { parseTime(timeText) }
-    val timeError = timeText.isNotBlank() && parsedTime == null
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(steps.size) {
@@ -199,62 +197,74 @@ fun ScheduleEditorScreen(
                 modifier = Modifier.padding(horizontal = AppSpacing.Content),
             )
         }
-        AppOutlinedTextField(
-            value = timeText,
-            onValueChange = { timeText = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text(stringResource(R.string.schedule_time_label)) },
-            supportingText = { Text(if (timeError) stringResource(R.string.invalid_time) else stringResource(R.string.schedule_time_supporting)) },
-            isError = timeError,
-            placeholder = { Text(stringResource(R.string.schedule_time_placeholder)) },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-        )
-        Box {
-            AppOutlinedTextField(
-                value = category,
-                onValueChange = { category = it },
+        Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.Hairline)) {
+            AppValueRow(
+                label = stringResource(R.string.schedule_deadline_label),
+                value = timeText.ifBlank { stringResource(R.string.schedule_deadline_not_set) },
+                onClick = { timePickerVisible = true },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.schedule_category_label)) },
-                supportingText = { Text(stringResource(R.string.schedule_category_supporting)) },
-                trailingIcon = {
-                    IconButton(onClick = { typeMenuVisible = true }) {
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.choose_schedule_type))
-                    }
-                },
-                singleLine = true,
             )
-            DropdownMenu(
-                expanded = typeMenuVisible,
-                onDismissRequest = { typeMenuVisible = false },
-                modifier = Modifier.heightIn(max = 320.dp),
-            ) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.no_schedule_type)) },
-                    onClick = {
-                        typeMenuVisible = false
-                        category = ""
+            Text(
+                text = stringResource(R.string.schedule_deadline_supporting),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = AppSpacing.Content),
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.Hairline)) {
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                AppOutlinedTextField(
+                    value = category,
+                    onValueChange = { category = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.schedule_category_label)) },
+                    trailingIcon = {
+                        IconButton(onClick = { typeMenuVisible = true }) {
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.choose_schedule_type))
+                        }
                     },
+                    singleLine = true,
                 )
-                state.scheduleTypes.forEach { type ->
+                DropdownMenu(
+                    expanded = typeMenuVisible,
+                    onDismissRequest = { typeMenuVisible = false },
+                    modifier = Modifier
+                        .width(maxWidth)
+                        .heightIn(max = 320.dp),
+                ) {
                     DropdownMenuItem(
-                        text = { Text(type.type.name, maxLines = 1) },
+                        text = { Text(stringResource(R.string.no_schedule_type)) },
                         onClick = {
                             typeMenuVisible = false
-                            if (category.trim() == type.type.name) return@DropdownMenuItem
-                            if (steps.isNotEmpty() && type.orderedSteps.isNotEmpty()) {
-                                pendingType = type
-                            } else {
-                                category = type.type.name
-                                if (steps.isEmpty()) {
-                                    steps = viewModel.stepsFromType(type, schedule.id)
-                                    status = statusAfterStepChange(status, steps)
-                                }
-                            }
+                            category = ""
                         },
                     )
+                    state.scheduleTypes.forEach { type ->
+                        DropdownMenuItem(
+                            text = { Text(type.type.name, maxLines = 1) },
+                            onClick = {
+                                typeMenuVisible = false
+                                if (category.trim() == type.type.name) return@DropdownMenuItem
+                                if (steps.isNotEmpty() && type.orderedSteps.isNotEmpty()) {
+                                    pendingType = type
+                                } else {
+                                    category = type.type.name
+                                    if (steps.isEmpty()) {
+                                        steps = viewModel.stepsFromType(type, schedule.id)
+                                        status = statusAfterStepChange(status, steps)
+                                    }
+                                }
+                            },
+                        )
+                    }
                 }
             }
+            Text(
+                text = stringResource(R.string.schedule_category_supporting),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = AppSpacing.Content),
+            )
         }
         AppOutlinedTextField(value = note, onValueChange = { note = it }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.schedule_note_label)) }, placeholder = { Text(stringResource(R.string.schedule_note_placeholder)) }, minLines = 3)
         AppSectionTitle(stringResource(R.string.production_steps), modifier = Modifier.padding(top = AppSpacing.Tight))
@@ -323,26 +333,6 @@ fun ScheduleEditorScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.add_step)) }
         }
-        AppSectionTitle(stringResource(R.string.schedule_status_label), modifier = Modifier.padding(top = AppSpacing.Tight))
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            ScheduleStatus.entries.forEachIndexed { index, option ->
-                SegmentedButton(
-                    selected = status == option,
-                    onClick = {
-                        if (option == ScheduleStatus.COMPLETED && steps.any { !it.isCompleted }) {
-                            completionDialogVisible = true
-                        } else {
-                            status = option
-                        }
-                    },
-                    shape = SegmentedButtonDefaults.itemShape(
-                        index = index,
-                        count = ScheduleStatus.entries.size,
-                    ),
-                    label = { Text(statusLabel(option), style = MaterialTheme.typography.labelMedium) },
-                )
-            }
-        }
         ListItem(
             modifier = Modifier.fillMaxWidth(),
             headlineContent = { Text(stringResource(R.string.schedule_reminder_label)) },
@@ -365,7 +355,7 @@ fun ScheduleEditorScreen(
                 titleSubmitted = true
                 stepsSubmitted = true
                 val normalizedSteps = steps.map { it.copy(title = it.title.trim()) }
-                if (title.trim().isNotEmpty() && !timeError && startDate <= endDate && normalizedSteps.none { it.title.isEmpty() }) {
+                if (title.trim().isNotEmpty() && startDate <= endDate && normalizedSteps.none { it.title.isEmpty() }) {
                     val updated = schedule.copy(
                         title = title,
                         note = note,
@@ -423,19 +413,31 @@ fun ScheduleEditorScreen(
             }
         }
     }
-    if (completionDialogVisible) {
+    if (timePickerVisible) {
+        val initialTime = parsedTime ?: LocalTime.of(defaultReminderTimeMinutes / 60, defaultReminderTimeMinutes % 60)
+        val timePickerState = rememberTimePickerState(
+            initialHour = initialTime.hour,
+            initialMinute = initialTime.minute,
+            is24Hour = true,
+        )
         AlertDialog(
-            onDismissRequest = { completionDialogVisible = false },
-            title = { Text(stringResource(R.string.incomplete_steps_title)) },
-            text = { Text(stringResource(R.string.incomplete_steps_message)) },
-            dismissButton = { TextButton(onClick = { completionDialogVisible = false }) { Text(stringResource(R.string.check_again)) } },
+            onDismissRequest = { timePickerVisible = false },
+            title = { Text(stringResource(R.string.schedule_deadline_label)) },
+            text = { TimePicker(state = timePickerState) },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        timeText = ""
+                        timePickerVisible = false
+                    }) { Text(stringResource(R.string.schedule_deadline_clear)) }
+                    TextButton(onClick = { timePickerVisible = false }) { Text(stringResource(R.string.cancel)) }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    val now = System.currentTimeMillis()
-                    steps = steps.map { it.copy(isCompleted = true, completedAt = it.completedAt ?: now, updatedAt = now) }
-                    status = ScheduleStatus.COMPLETED
-                    completionDialogVisible = false
-                }) { Text(stringResource(R.string.complete_all)) }
+                    timeText = "%02d:%02d".format(timePickerState.hour, timePickerState.minute)
+                    timePickerVisible = false
+                }) { Text(stringResource(R.string.confirm)) }
             },
         )
     }
@@ -492,11 +494,4 @@ private fun reminderDescription(minutes: Long): String = when {
     minutes % (24L * 60L) == 0L -> stringResource(R.string.reminder_before_days, minutes / (24L * 60L))
     minutes % 60L == 0L -> stringResource(R.string.reminder_before_hours, minutes / 60L)
     else -> stringResource(R.string.reminder_before_minutes, minutes)
-}
-
-@Composable
-private fun statusLabel(status: ScheduleStatus): String = when (status) {
-    ScheduleStatus.TODO -> stringResource(R.string.status_todo)
-    ScheduleStatus.IN_PROGRESS -> stringResource(R.string.status_in_progress)
-    ScheduleStatus.COMPLETED -> stringResource(R.string.status_completed)
 }

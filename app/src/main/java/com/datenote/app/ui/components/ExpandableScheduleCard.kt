@@ -160,11 +160,11 @@ fun ExpandableScheduleCard(
                         overdue = overdue,
                         completed = completed,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                start = AppSpacing.CardLeading + AppSpacing.CardColumnGap,
-                                top = AppSpacing.CardSection,
-                            ),
+                                .fillMaxWidth()
+                                .padding(
+                                    start = AppSpacing.CardLeading + AppSpacing.CardColumnGap,
+                                    top = AppSpacing.Hairline,
+                                ),
                     )
                 }
                 Box(
@@ -266,9 +266,9 @@ private fun ScheduleCardMeta(
     val startsLater = today < entity.startEpochDay
     val dueToday = today == entity.endEpochDay
     val inProgress = today >= entity.startEpochDay && today < entity.endEpochDay
-    val dateLine = dateSummary(entity) + entity.minuteOfDay?.let {
-        " · %02d:%02d".format(it / 60, it % 60)
-    }.orEmpty()
+    // Keep the home list focused on the date range. The exact deadline remains
+    // available in the editor and is still used for reminder scheduling.
+    val dateLine = dateSummary(entity)
 
     Column(
         modifier = modifier,

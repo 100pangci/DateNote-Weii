@@ -9,17 +9,20 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -28,11 +31,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -264,34 +272,100 @@ private fun StartupReminderDialog(
     val today = java.time.LocalDate.now()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(com.datenote.app.R.string.startup_reminder_title, nickname)) },
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(stringResource(com.datenote.app.R.string.startup_reminder_title, nickname))
+                Text(
+                    text = stringResource(com.datenote.app.R.string.startup_reminder_count, schedules.size),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+        },
         text = {
-            LazyColumn(modifier = Modifier.heightIn(max = 320.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 360.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 items(schedules, key = { it.schedule.id }) { schedule ->
-                    val entity = schedule.schedule
-                    val days = entity.endEpochDay - today.toEpochDay()
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(entity.title, maxLines = 2)
-                            val start = java.time.LocalDate.ofEpochDay(entity.startEpochDay)
-                            val end = java.time.LocalDate.ofEpochDay(entity.endEpochDay)
-                            Text(if (start == end) "${start.monthValue}月${start.dayOfMonth}日" else "${start.monthValue}月${start.dayOfMonth}日～${end.monthValue}月${end.dayOfMonth}日", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(startupRemainingText(entity, today), color = when {
-                                days < 0 -> MaterialTheme.colorScheme.error
-                                days <= 3L -> MaterialTheme.colorScheme.primary
-                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                            }, style = MaterialTheme.typography.labelLarge)
-                            if (schedule.orderedSteps.isNotEmpty()) {
-                                Text("制作进度 ${schedule.orderedSteps.count { it.isCompleted }}/${schedule.orderedSteps.size}", style = MaterialTheme.typography.labelSmall)
-                                schedule.orderedSteps.firstOrNull { !it.isCompleted }?.let { next -> Text("下一步：${next.title}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall) }
-                            }
-                        }
-                    }
+                    StartupReminderItem(schedule = schedule, today = today)
                 }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(com.datenote.app.R.string.startup_reminder_acknowledge)) } },
     )
+}
+
+@Composable
+private fun StartupReminderItem(
+    schedule: com.datenote.app.data.local.ScheduleWithSteps,
+    today: java.time.LocalDate,
+) {
+    val entity = schedule.schedule
+    val days = entity.endEpochDay - today.toEpochDay()
+    val statusColor = when {
+        days < 0 -> MaterialTheme.colorScheme.error
+        days <= 3L -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.secondary
+    }
+    val start = java.time.LocalDate.ofEpochDay(entity.startEpochDay)
+    val end = java.time.LocalDate.ofEpochDay(entity.endEpochDay)
+    val dateText = if (start == end) {
+        "${start.monthValue}月${start.dayOfMonth}日"
+    } else {
+        "${start.monthValue}月${start.dayOfMonth}日～${end.monthValue}月${end.dayOfMonth}日"
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 1.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .padding(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(5.dp)
+                    .fillMaxHeight()
+                    .background(statusColor, CircleShape),
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Text(
+                    text = entity.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                )
+                Text(
+                    text = dateText,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(statusColor.copy(alpha = 0.14f))
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                ) {
+                    Text(
+                        text = startupRemainingText(entity, today),
+                        color = statusColor,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

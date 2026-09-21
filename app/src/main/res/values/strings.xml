@@ -43,9 +43,6 @@
     <string name="other_day_empty">这一天还空着呢</string>
     <string name="add_schedule">新增安排</string>
     <string name="edit_schedule">编辑安排</string>
-    <string name="status_todo">还没开始</string>
-    <string name="status_in_progress">正在进行</string>
-    <string name="status_completed">已经完成</string>
     <string name="reminder_enabled">已开启提醒</string>
     <string name="schedule_more">更多操作</string>
     <string name="mark_completed">标记完成</string>
@@ -66,9 +63,10 @@
     <string name="single_day_summary">%1$d月%2$d日</string>
     <string name="date_range_summary">共 %1$d 天</string>
     <string name="schedule_card_date_range">%1$d月%2$d日～%3$d月%4$d日</string>
-    <string name="schedule_time_label">具体时间</string>
-    <string name="schedule_time_supporting">不用精确到几点</string>
-    <string name="schedule_time_placeholder">例如 09:30</string>
+    <string name="schedule_deadline_label">截止时间</string>
+    <string name="schedule_deadline_supporting">到期当天的完成时间，可不填写</string>
+    <string name="schedule_deadline_not_set">不设置</string>
+    <string name="schedule_deadline_clear">清除时间</string>
     <string name="schedule_category_label">给它分个类</string>
     <string name="schedule_category_supporting">可以选择已保存的排期类型，也可以直接填写文字</string>
     <string name="choose_schedule_type">选择排期类型</string>
@@ -87,7 +85,6 @@
     <string name="reminder_before_hours">提前 %1$d 小时提醒</string>
     <string name="reminder_before_days">提前 %1$d 天提醒</string>
     <string name="reminder_before_weeks">提前 %1$d 周提醒</string>
-    <string name="schedule_status_label">现在的状态</string>
     <string name="save_schedule">记好啦</string>
     <string name="production_steps">制作进度</string>
     <string name="no_steps_message">还没有添加制作步骤\n把过程拆开，就不容易忘记啦</string>
@@ -109,10 +106,10 @@
     <string name="days_to_start">还有 %1$d 天开始</string>
     <string name="in_progress_remaining">进行中 · 还剩 %1$d 天</string>
     <string name="title_required">写下要做的事情吧</string>
-    <string name="invalid_time">时间格式可以写成 09:30</string>
     <string name="cancel">取消</string>
     <string name="confirm">确认</string>
     <string name="startup_reminder_title">%1$s，来看看最近的安排吧</string>
+    <string name="startup_reminder_count">%1$d 项待关注</string>
     <string name="startup_reminder_acknowledge">我知道啦</string>
     <string name="days_remaining">还剩 %1$d 天</string>
     <string name="tomorrow">就是明天</string>

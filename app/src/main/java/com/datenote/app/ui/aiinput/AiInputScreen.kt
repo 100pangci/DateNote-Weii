@@ -2,6 +2,7 @@ package com.datenote.app.ui.aiinput
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -333,49 +334,57 @@ private fun DraftCard(
                     label = { Text(stringResource(R.string.ai_time)) },
                     singleLine = true,
                 )
-                androidx.compose.foundation.layout.Box {
-                    AppOutlinedTextField(
-                        draft.category,
-                        { onChange(draft.copy(category = it)) },
-                        Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.ai_category)) },
-                        supportingText = { Text(stringResource(R.string.schedule_category_supporting)) },
-                        trailingIcon = {
-                            IconButton(onClick = { typeMenuVisible = true }) {
-                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.choose_schedule_type))
-                            }
-                        },
-                        singleLine = true,
-                    )
-                    DropdownMenu(
-                        expanded = typeMenuVisible,
-                        onDismissRequest = { typeMenuVisible = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.no_schedule_type)) },
-                            onClick = {
-                                typeMenuVisible = false
-                                onChange(draft.copy(category = ""))
+                Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.Hairline)) {
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        AppOutlinedTextField(
+                            draft.category,
+                            { onChange(draft.copy(category = it)) },
+                            Modifier.fillMaxWidth(),
+                            label = { Text(stringResource(R.string.ai_category)) },
+                            trailingIcon = {
+                                IconButton(onClick = { typeMenuVisible = true }) {
+                                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.choose_schedule_type))
+                                }
                             },
+                            singleLine = true,
                         )
-                        scheduleTypes.forEach { type ->
+                        DropdownMenu(
+                            expanded = typeMenuVisible,
+                            onDismissRequest = { typeMenuVisible = false },
+                            modifier = Modifier.width(maxWidth),
+                        ) {
                             DropdownMenuItem(
-                                text = { Text(type.type.name, maxLines = 1) },
+                                text = { Text(stringResource(R.string.no_schedule_type)) },
                                 onClick = {
                                     typeMenuVisible = false
-                                    if (draft.category.trim() != type.type.name) {
-                                        if (draft.steps.isNotEmpty() && type.orderedSteps.isNotEmpty()) pendingType = type
-                                        else onChange(
-                                            draft.copy(
-                                                category = type.type.name,
-                                                steps = if (draft.steps.isEmpty()) type.toScheduleSteps(0).map { EditableAiStep(it.position.toLong(), it.title, false) } else draft.steps,
-                                            ),
-                                        )
-                                    }
+                                    onChange(draft.copy(category = ""))
                                 },
                             )
+                            scheduleTypes.forEach { type ->
+                                DropdownMenuItem(
+                                    text = { Text(type.type.name, maxLines = 1) },
+                                    onClick = {
+                                        typeMenuVisible = false
+                                        if (draft.category.trim() != type.type.name) {
+                                            if (draft.steps.isNotEmpty() && type.orderedSteps.isNotEmpty()) pendingType = type
+                                            else onChange(
+                                                draft.copy(
+                                                    category = type.type.name,
+                                                    steps = if (draft.steps.isEmpty()) type.toScheduleSteps(0).map { EditableAiStep(it.position.toLong(), it.title, false) } else draft.steps,
+                                                ),
+                                            )
+                                        }
+                                    },
+                                )
+                            }
                         }
                     }
+                    Text(
+                        text = stringResource(R.string.schedule_category_supporting),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = AppSpacing.Content),
+                    )
                 }
                 AppOutlinedTextField(draft.note, { onChange(draft.copy(note = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.ai_note)) }, minLines = 2)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
