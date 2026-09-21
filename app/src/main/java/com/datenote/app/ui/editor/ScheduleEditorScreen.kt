@@ -26,6 +26,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DisplayMode
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,6 +45,7 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -388,7 +390,12 @@ fun ScheduleEditorScreen(
 
     datePickerTarget?.let { target ->
         val initial = if (target == DateTarget.START) startDate else endDate
-        val pickerState = rememberDatePickerState(initialSelectedDateMillis = initial.toEpochDay() * 86_400_000L)
+        val initialMillis = initial.toEpochDay() * 86_400_000L
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = initialMillis,
+            initialDisplayedMonthMillis = initialMillis,
+            initialDisplayMode = DisplayMode.Picker,
+        )
         DatePickerDialog(
             onDismissRequest = { datePickerTarget = null },
             confirmButton = {
@@ -404,7 +411,17 @@ fun ScheduleEditorScreen(
                 }) { Text(stringResource(R.string.confirm)) }
             },
             dismissButton = { TextButton(onClick = { datePickerTarget = null }) { Text(stringResource(R.string.cancel)) } },
-        ) { DatePicker(state = pickerState) }
+        ) {
+            // Recreate only the DatePicker UI when switching modes so Material3's
+            // slow AnimatedContent transition does not run. The state is retained.
+            val displayMode = pickerState.displayMode
+            key(displayMode) {
+                DatePicker(
+                    state = pickerState,
+                    showModeToggle = true,
+                )
+            }
+        }
     }
     if (completionDialogVisible) {
         AlertDialog(
