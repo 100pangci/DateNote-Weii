@@ -16,10 +16,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
@@ -124,51 +126,64 @@ fun ExpandableScheduleCard(
                     vertical = AppSpacing.CardVertical,
                 ),
         ) {
-            Row(
+            Box(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(AppSpacing.CardColumnGap),
             ) {
-                Box(
-                    modifier = Modifier.width(AppSpacing.CardLeading),
-                    contentAlignment = Alignment.TopCenter,
-                ) {
-                    Checkbox(
-                        checked = completed,
-                        modifier = Modifier.size(AppSpacing.CardLeading),
-                        onCheckedChange = { toggleCompletedAndCollapse() },
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    ScheduleCardInfo(
-                        schedule = schedule,
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(AppSpacing.CardColumnGap),
+                    ) {
+                        Spacer(Modifier.width(AppSpacing.CardLeading))
+                        Column(modifier = Modifier.weight(1f)) {
+                            ScheduleCardInfo(
+                                schedule = schedule,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        ScheduleCardActions(
+                            hasSteps = hasSteps,
+                            expanded = expanded,
+                            completed = completed,
+                            menuExpanded = menuExpanded,
+                            onToggleExpanded = { expanded = !expanded },
+                            onMenuExpandChange = { menuExpanded = it },
+                            onEdit = onEdit,
+                            onToggleCompleted = toggleCompletedAndCollapse,
+                            onPostpone = onPostpone,
+                            onDelete = onDelete,
+                        )
+                    }
+                    ScheduleCardMeta(
+                        schedule = schedule,
+                        overdue = overdue,
+                        completed = completed,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                start = AppSpacing.CardLeading + AppSpacing.CardColumnGap,
+                                top = AppSpacing.CardSection,
+                            ),
                     )
                 }
-                ScheduleCardActions(
-                    hasSteps = hasSteps,
-                    expanded = expanded,
-                    completed = completed,
-                    menuExpanded = menuExpanded,
-                    onToggleExpanded = { expanded = !expanded },
-                    onMenuExpandChange = { menuExpanded = it },
-                    onEdit = onEdit,
-                    onToggleCompleted = toggleCompletedAndCollapse,
-                    onPostpone = onPostpone,
-                    onDelete = onDelete,
-                )
+                Box(
+                    modifier = Modifier.matchParentSize(),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(AppSpacing.CardLeading)
+                            .fillMaxHeight(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Checkbox(
+                            checked = completed,
+                            modifier = Modifier.size(AppSpacing.CardLeading),
+                            onCheckedChange = { toggleCompletedAndCollapse() },
+                        )
+                    }
+                }
             }
-            ScheduleCardMeta(
-                schedule = schedule,
-                overdue = overdue,
-                completed = completed,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        start = AppSpacing.CardLeading + AppSpacing.CardColumnGap,
-                        top = AppSpacing.CardSection,
-                    ),
-            )
             if (hasSteps) {
                 LinearProgressIndicator(
                     progress = { animatedProgress.coerceIn(0f, 1f) },
@@ -247,7 +262,10 @@ private fun ScheduleCardMeta(
     modifier: Modifier = Modifier,
 ) {
     val entity = schedule.schedule
-    val startsLater = LocalDate.now().toEpochDay() < entity.startEpochDay
+    val today = LocalDate.now().toEpochDay()
+    val startsLater = today < entity.startEpochDay
+    val dueToday = today == entity.endEpochDay
+    val inProgress = today >= entity.startEpochDay && today < entity.endEpochDay
     val dateLine = dateSummary(entity) + entity.minuteOfDay?.let {
         " · %02d:%02d".format(it / 60, it % 60)
     }.orEmpty()
@@ -265,17 +283,18 @@ private fun ScheduleCardMeta(
                 text = dateLine,
                 modifier = Modifier.weight(1f, fill = false),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (overdue || completed || startsLater) {
+            if (overdue || completed || startsLater || dueToday || inProgress) {
                 ScheduleStatusChip(
                     text = scheduleProgressText(schedule),
                     overdue = overdue,
                 )
             }
         }
-        if (!overdue && !completed && !startsLater) {
+        if (!overdue && !completed && !startsLater && !dueToday && !inProgress) {
             Text(
                 text = scheduleProgressText(schedule),
                 modifier = Modifier.fillMaxWidth(),

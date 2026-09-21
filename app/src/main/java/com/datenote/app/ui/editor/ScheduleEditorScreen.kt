@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -28,11 +29,13 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -116,7 +119,6 @@ fun ScheduleEditorScreen(
     var titleSubmitted by rememberSaveable(schedule.id) { mutableStateOf(false) }
     var stepsSubmitted by rememberSaveable(schedule.id) { mutableStateOf(false) }
     var datePickerTarget by rememberSaveable { mutableStateOf<DateTarget?>(null) }
-    var statusMenuVisible by remember { mutableStateOf(false) }
     var typeMenuVisible by remember { mutableStateOf(false) }
     var pendingType by remember { mutableStateOf<ScheduleTypeWithSteps?>(null) }
     var completionDialogVisible by remember { mutableStateOf(false) }
@@ -167,18 +169,23 @@ fun ScheduleEditorScreen(
             isError = titleError,
             supportingText = { if (titleError) Text(stringResource(R.string.title_required)) },
         )
-        AppValueRow(
-            label = stringResource(R.string.schedule_start_label),
-            value = stringResource(R.string.date_year_month_day, startDate.year, startDate.monthValue, startDate.dayOfMonth),
-            onClick = { datePickerTarget = DateTarget.START },
+        Row(
             modifier = Modifier.fillMaxWidth(),
-        )
-        AppValueRow(
-            label = stringResource(R.string.schedule_end_label),
-            value = stringResource(R.string.date_year_month_day, endDate.year, endDate.monthValue, endDate.dayOfMonth),
-            onClick = { datePickerTarget = DateTarget.END },
-            modifier = Modifier.fillMaxWidth(),
-        )
+            horizontalArrangement = Arrangement.spacedBy(AppSpacing.Tight),
+        ) {
+            AppValueRow(
+                label = stringResource(R.string.schedule_start_label),
+                value = stringResource(R.string.date_year_month_day, startDate.year, startDate.monthValue, startDate.dayOfMonth),
+                onClick = { datePickerTarget = DateTarget.START },
+                modifier = Modifier.weight(1f),
+            )
+            AppValueRow(
+                label = stringResource(R.string.schedule_end_label),
+                value = stringResource(R.string.date_year_month_day, endDate.year, endDate.monthValue, endDate.dayOfMonth),
+                onClick = { datePickerTarget = DateTarget.END },
+                modifier = Modifier.weight(1f),
+            )
+        }
         if (startDate != endDate) {
             Text(
                 stringResource(
@@ -259,7 +266,13 @@ fun ScheduleEditorScreen(
                     verticalArrangement = Arrangement.spacedBy(AppSpacing.Tight),
                 ) {
                     Text(stringResource(R.string.no_steps_message), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                    TextButton(onClick = { steps = listOf(newStep(schedule.id)) }) { Text(stringResource(R.string.add_first_step)) }
+                    TextButton(
+                        onClick = { steps = listOf(newStep(schedule.id)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = CircleShape,
+                    ) {
+                        Text(stringResource(R.string.add_first_step))
+                    }
                 }
             }
         } else {
@@ -309,23 +322,23 @@ fun ScheduleEditorScreen(
             ) { Text(stringResource(R.string.add_step)) }
         }
         AppSectionTitle(stringResource(R.string.schedule_status_label), modifier = Modifier.padding(top = AppSpacing.Tight))
-        Box {
-            FilterChip(
-                selected = status != ScheduleStatus.TODO,
-                onClick = { statusMenuVisible = true },
-                label = { Text(statusLabel(status), style = MaterialTheme.typography.labelMedium) },
-            )
-            DropdownMenu(expanded = statusMenuVisible, onDismissRequest = { statusMenuVisible = false }) {
-                ScheduleStatus.entries.forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text(statusLabel(option)) },
-                        onClick = {
-                            statusMenuVisible = false
-                            if (option == ScheduleStatus.COMPLETED && steps.any { !it.isCompleted }) completionDialogVisible = true
-                            else status = option
-                        },
-                    )
-                }
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            ScheduleStatus.entries.forEachIndexed { index, option ->
+                SegmentedButton(
+                    selected = status == option,
+                    onClick = {
+                        if (option == ScheduleStatus.COMPLETED && steps.any { !it.isCompleted }) {
+                            completionDialogVisible = true
+                        } else {
+                            status = option
+                        }
+                    },
+                    shape = SegmentedButtonDefaults.itemShape(
+                        index = index,
+                        count = ScheduleStatus.entries.size,
+                    ),
+                    label = { Text(statusLabel(option), style = MaterialTheme.typography.labelMedium) },
+                )
             }
         }
         ListItem(
