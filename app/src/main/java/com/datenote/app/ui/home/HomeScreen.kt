@@ -52,6 +52,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.datenote.app.R
 import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
+import com.datenote.app.data.repository.UserPreferencesRepository
 import com.datenote.app.domain.model.ScheduleStatus
 import com.datenote.app.domain.model.isOverdue
 import com.datenote.app.domain.model.monthGrid
@@ -69,14 +70,14 @@ fun HomeScreen(
     nickname: String,
     repository: ScheduleRepository,
     reminderScheduler: ReminderScheduler,
-    defaultReminderTimeMinutes: Int,
+    preferencesRepository: UserPreferencesRepository,
     defaultExpandSteps: Boolean,
     autoCollapseCompletedSteps: Boolean,
     showWelcome: Boolean,
     onAdd: () -> Unit,
     onEdit: (Long) -> Unit,
 ) {
-    val viewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory(repository, reminderScheduler, defaultReminderTimeMinutes))
+    val viewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory(repository, reminderScheduler, preferencesRepository))
     val month by viewModel.displayedMonth.collectAsStateWithLifecycle()
     val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
     val monthSchedules by viewModel.monthSchedules.collectAsStateWithLifecycle()

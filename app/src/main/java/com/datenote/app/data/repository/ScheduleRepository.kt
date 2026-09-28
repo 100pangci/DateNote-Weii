@@ -11,6 +11,7 @@ import com.datenote.app.data.local.ScheduleTypeStepEntity
 import com.datenote.app.data.local.ScheduleTypeWithSteps
 import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.domain.model.ScheduleStatus
+import com.datenote.app.domain.model.hasValidDateAndReminderRange
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -47,7 +48,18 @@ class ScheduleRepository(private val database: DateNoteDatabase) {
     suspend fun insert(schedule: ScheduleEntity): Long = withContext(Dispatchers.IO) { dao.insert(schedule) }
 
     suspend fun saveWithSteps(schedule: ScheduleEntity, steps: List<ScheduleStepEntity>): Long =
-        withContext(Dispatchers.IO) { dao.saveWithSteps(schedule, steps) }
+        withContext(Dispatchers.IO) {
+            require(schedule.hasValidDateAndReminderRange()) { "Schedule contains an invalid date or reminder range" }
+            dao.saveWithSteps(schedule, steps)
+        }
+
+    suspend fun saveAllWithSteps(schedules: List<ScheduleWithSteps>): List<Long> =
+        withContext(Dispatchers.IO) {
+            require(schedules.all { it.schedule.hasValidDateAndReminderRange() }) {
+                "Schedules contain an invalid date or reminder range"
+            }
+            dao.saveAllWithSteps(schedules)
+        }
 
     suspend fun insertAll(schedules: List<ScheduleEntity>): List<Long> =
         withContext(Dispatchers.IO) { dao.insertAll(schedules) }
@@ -123,6 +135,9 @@ class ScheduleRepository(private val database: DateNoteDatabase) {
         types: List<ScheduleTypeWithSteps>,
         replace: Boolean,
     ) = withContext(Dispatchers.IO) {
+        require(schedules.all { it.schedule.hasValidDateAndReminderRange() }) {
+            "Schedules contain an invalid date or reminder range"
+        }
         database.withTransaction {
             if (replace) {
                 dao.deleteAll()

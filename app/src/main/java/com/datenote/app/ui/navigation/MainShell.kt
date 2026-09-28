@@ -160,7 +160,7 @@ fun MainShell(
                     nickname = nickname,
                     repository = repository,
                     reminderScheduler = reminderScheduler,
-                    defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes,
+                    preferencesRepository = preferencesRepository,
                     defaultExpandSteps = preferences.defaultExpandSteps,
                     autoCollapseCompletedSteps = preferences.autoCollapseCompletedSteps,
                     showWelcome = showWelcome,
@@ -168,8 +168,8 @@ fun MainShell(
                     onEdit = { navController.navigate("schedule/$it") },
                 )
             }
-            composable(AllRoute, enterTransition = topLevelEnter, exitTransition = topLevelExit) { AllSchedulesScreen(repository = repository, reminderScheduler = reminderScheduler, defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes, defaultExpandSteps = preferences.defaultExpandSteps, autoCollapseCompletedSteps = preferences.autoCollapseCompletedSteps, onEdit = { navController.navigate("schedule/$it") }) }
-            composable(AiRoute, enterTransition = topLevelEnter, exitTransition = topLevelExit) { AiInputScreen(aiRepository = aiRepository, repository = repository, defaultReminderMinutes = preferences.defaultReminderMinutes, reminderScheduler = reminderScheduler, defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes, onRequestNotifications = onRequestNotifications) }
+            composable(AllRoute, enterTransition = topLevelEnter, exitTransition = topLevelExit) { AllSchedulesScreen(repository = repository, reminderScheduler = reminderScheduler, preferencesRepository = preferencesRepository, defaultExpandSteps = preferences.defaultExpandSteps, autoCollapseCompletedSteps = preferences.autoCollapseCompletedSteps, onEdit = { navController.navigate("schedule/$it") }) }
+            composable(AiRoute, enterTransition = topLevelEnter, exitTransition = topLevelExit) { AiInputScreen(aiRepository = aiRepository, repository = repository, reminderScheduler = reminderScheduler, preferencesRepository = preferencesRepository, onRequestNotifications = onRequestNotifications) }
             composable(SettingsRoute, enterTransition = topLevelEnter, exitTransition = topLevelExit) {
                 SettingsScreen(
                     preferencesRepository = preferencesRepository,
@@ -224,6 +224,7 @@ fun MainShell(
                     repository = repository,
                     defaultReminderMinutes = preferences.defaultReminderMinutes,
                     reminderScheduler = reminderScheduler,
+                    preferencesRepository = preferencesRepository,
                     defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes,
                     onBack = { navController.popBackStack() },
                     onSaved = { navController.popBackStack() },
@@ -236,6 +237,7 @@ fun MainShell(
                     repository = repository,
                     defaultReminderMinutes = preferences.defaultReminderMinutes,
                     reminderScheduler = reminderScheduler,
+                    preferencesRepository = preferencesRepository,
                     defaultReminderTimeMinutes = preferences.defaultReminderTimeMinutes,
                     onBack = { navController.popBackStack() },
                     onSaved = { navController.popBackStack() },

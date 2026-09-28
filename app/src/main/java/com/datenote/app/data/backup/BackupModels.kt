@@ -7,6 +7,8 @@ import com.datenote.app.data.local.ScheduleTypeStepEntity
 import com.datenote.app.data.local.ScheduleTypeWithSteps
 import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.domain.model.ScheduleStatus
+import com.datenote.app.domain.model.MAX_REMINDER_LEAD_MINUTES
+import com.datenote.app.domain.model.isSupportedScheduleDateRange
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -123,14 +125,19 @@ data class BackupData(
 )
 
 fun BackupDocument.toBackupData(): BackupData = BackupData(
-    schedules = schedules.mapNotNull(BackupSchedule::toScheduleWithSteps),
+    schedules = schedules.map { schedule ->
+        requireNotNull(schedule.toScheduleWithSteps()) { "Backup contains an invalid schedule date or reminder range" }
+    },
     types = types.mapNotNull(BackupScheduleType::toScheduleTypeWithSteps),
 )
 
 fun BackupSchedule.toScheduleWithSteps(): ScheduleWithSteps? {
     val cleanTitle = title.trim().takeIf { it.isNotEmpty() } ?: return null
     val start = startEpochDay ?: scheduledEpochDay ?: return null
-    val end = (endEpochDay ?: scheduledEpochDay ?: start).coerceAtLeast(start)
+    val end = endEpochDay ?: scheduledEpochDay ?: start
+    if (!isSupportedScheduleDateRange(start, end)) return null
+    val safeReminder = remindBeforeMinutes?.takeIf { it in 0..MAX_REMINDER_LEAD_MINUTES }
+    if (remindBeforeMinutes != null && safeReminder == null) return null
     val safeStatus = runCatching { ScheduleStatus.valueOf(status) }.getOrDefault(ScheduleStatus.TODO)
     val safeMinute = minuteOfDay?.takeIf { it in 0..1439 }
     val schedule = ScheduleEntity(
@@ -142,7 +149,7 @@ fun BackupSchedule.toScheduleWithSteps(): ScheduleWithSteps? {
         category = category?.trim()?.takeIf { it.isNotEmpty() },
         status = safeStatus,
         colorArgb = colorArgb,
-        remindBeforeMinutes = remindBeforeMinutes?.takeIf { it >= 0 },
+        remindBeforeMinutes = safeReminder,
         createdAt = createdAt.takeIf { it > 0 } ?: System.currentTimeMillis(),
         updatedAt = updatedAt.takeIf { it > 0 } ?: System.currentTimeMillis(),
         completedAt = completedAt,

@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.datenote.app.data.local.DateNoteDatabase
 import com.datenote.app.data.local.ScheduleEntity
 import com.datenote.app.data.local.ScheduleStepEntity
+import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.data.local.ScheduleTypeEntity
 import com.datenote.app.data.local.ScheduleTypeStepEntity
 import com.datenote.app.domain.model.ScheduleStatus
@@ -107,6 +108,27 @@ class ScheduleDaoTest {
         assertEquals(listOf("制作完成", "打包"), updated.map { it.title })
         assertEquals(keptId, updated.first().id)
         assertTrue(original.first().id !in updated.map { it.id })
+    }
+
+    @Test
+    fun batchSaveRollsBackAllSchedulesAndStepsWhenOneInsertFails() = runBlocking {
+        val dao = database.scheduleDao()
+        database.openHelper.writableDatabase.execSQL(
+            "CREATE TRIGGER reject_named_schedule BEFORE INSERT ON schedules " +
+                "WHEN NEW.title = 'reject' BEGIN SELECT RAISE(ABORT, 'test failure'); END",
+        )
+        val items = listOf(
+            ScheduleWithSteps(
+                ScheduleEntity(title = "first", startEpochDay = 1),
+                listOf(ScheduleStepEntity(scheduleId = 0, title = "step", position = 0)),
+            ),
+            ScheduleWithSteps(ScheduleEntity(title = "reject", startEpochDay = 2), emptyList()),
+        )
+
+        val result = runCatching { dao.saveAllWithSteps(items) }
+
+        assertTrue(result.isFailure)
+        assertEquals(0, dao.count())
     }
 
     @Test

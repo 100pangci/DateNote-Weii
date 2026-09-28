@@ -45,7 +45,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -66,6 +65,7 @@ import com.datenote.app.data.local.ScheduleEntity
 import com.datenote.app.data.local.ScheduleStepEntity
 import com.datenote.app.data.local.ScheduleTypeWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
+import com.datenote.app.data.repository.UserPreferencesRepository
 import com.datenote.app.domain.model.statusAfterStepChange
 import com.datenote.app.reminder.NotificationAccess
 import com.datenote.app.reminder.ReminderScheduler
@@ -92,6 +92,7 @@ fun ScheduleEditorScreen(
     repository: ScheduleRepository,
     defaultReminderMinutes: Int,
     reminderScheduler: ReminderScheduler,
+    preferencesRepository: UserPreferencesRepository,
     defaultReminderTimeMinutes: Int,
     onBack: () -> Unit,
     onSaved: (Boolean) -> Unit,
@@ -99,27 +100,16 @@ fun ScheduleEditorScreen(
 ) {
     val viewModel: ScheduleEditorViewModel = viewModel(
         key = "editor-${scheduleId ?: "new"}",
-        factory = ScheduleEditorViewModel.Factory(repository, scheduleId, defaultReminderMinutes, reminderScheduler, defaultReminderTimeMinutes),
+        factory = ScheduleEditorViewModel.Factory(repository, scheduleId, defaultReminderMinutes, reminderScheduler, preferencesRepository),
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     val schedule = state.schedule
-    if (state.isLoading || schedule == null) {
+    val draft = state.draft
+    if (state.isLoading || schedule == null || draft == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         return
     }
 
-    var title by remember(schedule.id) { mutableStateOf(schedule.title) }
-    var note by remember(schedule.id) { mutableStateOf(schedule.note) }
-    var category by remember(schedule.id) { mutableStateOf(schedule.category.orEmpty()) }
-    var startDate by remember(schedule.id) { mutableStateOf(LocalDate.ofEpochDay(schedule.startEpochDay)) }
-    var endDate by remember(schedule.id) { mutableStateOf(LocalDate.ofEpochDay(maxOf(schedule.startEpochDay, schedule.endEpochDay))) }
-    var timeText by remember(schedule.id) { mutableStateOf(schedule.minuteOfDay?.let { "%02d:%02d".format(it / 60, it % 60) }.orEmpty()) }
-    var status by remember(schedule.id) { mutableStateOf(schedule.status) }
-    var steps by remember(schedule.id) { mutableStateOf(state.steps) }
-    var reminderEnabled by remember(schedule.id) { mutableStateOf(schedule.remindBeforeMinutes != null) }
-    var reminderText by remember(schedule.id) {
-        mutableStateOf((schedule.remindBeforeMinutes ?: defaultReminderMinutes.toLong()).toString())
-    }
     var titleSubmitted by rememberSaveable(schedule.id) { mutableStateOf(false) }
     var stepsSubmitted by rememberSaveable(schedule.id) { mutableStateOf(false) }
     var reminderSubmitted by rememberSaveable(schedule.id) { mutableStateOf(false) }
@@ -128,25 +118,19 @@ fun ScheduleEditorScreen(
     var pendingType by remember { mutableStateOf<ScheduleTypeWithSteps?>(null) }
     var notificationUnavailable by rememberSaveable(schedule.id) { mutableStateOf(false) }
     var timePickerVisible by rememberSaveable(schedule.id) { mutableStateOf(false) }
-    // Stable row ids for unsaved steps, which all share the database id 0.
-    val transientStepIds = remember(schedule.id) { mutableMapOf<ScheduleStepEntity, Long>() }
-    var nextTransientStepId by remember(schedule.id) { mutableLongStateOf(-1L) }
-    fun stepEntityId(step: ScheduleStepEntity): Long = if (step.id != 0L) {
-        step.id
-    } else {
-        transientStepIds.getOrPut(step) { nextTransientStepId-- }
-    }
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
-    val titleError = titleSubmitted && title.trim().isEmpty()
+    val steps = draft.steps.map { it.step }
+    val titleError = titleSubmitted && draft.title.trim().isEmpty()
     val stepsError = stepsSubmitted && steps.any { it.title.trim().isEmpty() }
-    val reminderMinutes = reminderText.trim().toLongOrNull()?.takeIf { it in 0..43_200 }
-    val reminderError = reminderSubmitted && reminderEnabled && reminderMinutes == null
-    val parsedTime = remember(timeText) { parseTime(timeText) }
+    val reminderMinutes = draft.reminderText.trim().toLongOrNull()?.takeIf { it in 0..43_200 }
+    val reminderError = reminderSubmitted && draft.reminderEnabled && reminderMinutes == null
+    val parsedTime = draft.minuteOfDay?.let { LocalTime.of(it / 60, it % 60) }
+    val timeText = parsedTime?.let { "%02d:%02d".format(it.hour, it.minute) }.orEmpty()
     val focusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(steps.size) {
-        if (steps.lastOrNull()?.title.isNullOrEmpty()) focusRequester.requestFocus()
+    LaunchedEffect(draft.steps.lastOrNull()?.rowId) {
+        if (draft.shouldFocusLastEmptyStep()) focusRequester.requestFocus()
     }
 
     Scaffold(
@@ -167,8 +151,8 @@ fun ScheduleEditorScreen(
         verticalArrangement = Arrangement.spacedBy(AppSpacing.Compact),
     ) {
         AppOutlinedTextField(
-            value = title,
-            onValueChange = { title = it; titleSubmitted = false },
+            value = draft.title,
+            onValueChange = { value -> viewModel.updateDraft { it.copy(title = value) }; titleSubmitted = false },
             modifier = Modifier.fillMaxWidth(),
             label = { Text(stringResource(R.string.schedule_title_label)) },
             placeholder = { Text(stringResource(R.string.schedule_title_placeholder)) },
@@ -181,22 +165,22 @@ fun ScheduleEditorScreen(
         ) {
             AppValueRow(
                 label = stringResource(R.string.schedule_start_label),
-                value = stringResource(R.string.date_year_month_day, startDate.year, startDate.monthValue, startDate.dayOfMonth),
+                value = stringResource(R.string.date_year_month_day, LocalDate.ofEpochDay(draft.startEpochDay).year, LocalDate.ofEpochDay(draft.startEpochDay).monthValue, LocalDate.ofEpochDay(draft.startEpochDay).dayOfMonth),
                 onClick = { datePickerTarget = DateTarget.START },
                 modifier = Modifier.weight(1f),
             )
             AppValueRow(
                 label = stringResource(R.string.schedule_end_label),
-                value = stringResource(R.string.date_year_month_day, endDate.year, endDate.monthValue, endDate.dayOfMonth),
+                value = stringResource(R.string.date_year_month_day, LocalDate.ofEpochDay(draft.endEpochDay).year, LocalDate.ofEpochDay(draft.endEpochDay).monthValue, LocalDate.ofEpochDay(draft.endEpochDay).dayOfMonth),
                 onClick = { datePickerTarget = DateTarget.END },
                 modifier = Modifier.weight(1f),
             )
         }
-        if (startDate != endDate) {
+        if (draft.startEpochDay != draft.endEpochDay) {
             Text(
                 stringResource(
                     R.string.date_range_summary,
-                    endDate.toEpochDay() - startDate.toEpochDay() + 1,
+                    draft.endEpochDay - draft.startEpochDay + 1,
                 ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,
@@ -220,8 +204,8 @@ fun ScheduleEditorScreen(
         Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.Hairline)) {
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 AppOutlinedTextField(
-                    value = category,
-                    onValueChange = { category = it },
+                    value = draft.category,
+                    onValueChange = { value -> viewModel.updateDraft { it.copy(category = value) } },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.schedule_category_label)) },
                     trailingIcon = {
@@ -242,7 +226,7 @@ fun ScheduleEditorScreen(
                         text = { Text(stringResource(R.string.no_schedule_type)) },
                         onClick = {
                             typeMenuVisible = false
-                            category = ""
+                            viewModel.updateDraft { it.copy(category = "") }
                         },
                     )
                     state.scheduleTypes.forEach { type ->
@@ -250,14 +234,14 @@ fun ScheduleEditorScreen(
                             text = { Text(type.type.name, maxLines = 1) },
                             onClick = {
                                 typeMenuVisible = false
-                                if (category.trim() == type.type.name) return@DropdownMenuItem
+                                if (draft.category.trim() == type.type.name) return@DropdownMenuItem
                                 if (steps.isNotEmpty() && type.orderedSteps.isNotEmpty()) {
                                     pendingType = type
                                 } else {
-                                    category = type.type.name
+                                    viewModel.updateDraft { it.copy(category = type.type.name) }
                                     if (steps.isEmpty()) {
-                                        steps = viewModel.stepsFromType(type, schedule.id)
-                                        status = statusAfterStepChange(status, steps)
+                                        val typeSteps = viewModel.stepsFromType(type, schedule.id)
+                                        viewModel.updateDraft { it.copy(steps = typeSteps, status = statusAfterStepChange(it.status, typeSteps.map { item -> item.step })) }
                                     }
                                 }
                             },
@@ -272,7 +256,7 @@ fun ScheduleEditorScreen(
                 modifier = Modifier.padding(horizontal = AppSpacing.Content),
             )
         }
-        AppOutlinedTextField(value = note, onValueChange = { note = it }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.schedule_note_label)) }, placeholder = { Text(stringResource(R.string.schedule_note_placeholder)) }, minLines = 3)
+        AppOutlinedTextField(value = draft.note, onValueChange = { value -> viewModel.updateDraft { it.copy(note = value) } }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.schedule_note_label)) }, placeholder = { Text(stringResource(R.string.schedule_note_placeholder)) }, minLines = 3)
         AppSectionTitle(stringResource(R.string.production_steps), modifier = Modifier.padding(top = AppSpacing.Tight))
         if (steps.isEmpty()) {
             AppCard(
@@ -285,7 +269,7 @@ fun ScheduleEditorScreen(
                 ) {
                     Text(stringResource(R.string.no_steps_message), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                     TextButton(
-                        onClick = { steps = listOf(newStep(schedule.id)) },
+                        onClick = viewModel::addStep,
                         modifier = Modifier.fillMaxWidth(),
                         shape = CircleShape,
                     ) {
@@ -294,30 +278,34 @@ fun ScheduleEditorScreen(
                 }
             }
         } else {
-            val stepIds = steps.map(::stepEntityId)
+            val stepIds = draft.steps.map { it.rowId }
             ReorderableColumn(
                 items = stepIds,
                 onMove = { fromIndex, toIndex ->
-                    steps = steps.moveItem(fromIndex, toIndex)
+                    viewModel.updateDraft { it.copy(steps = it.steps.moveItem(fromIndex, toIndex)) }
                 },
                 onDragStart = { focusManager.clearFocus() },
             ) { stepId, dragHandleModifier ->
-                val index = steps.indexOfFirst { stepEntityId(it) == stepId }
-                val step = steps[index]
+                val index = draft.steps.indexOfFirst { it.rowId == stepId }
+                val stepDraft = draft.steps[index]
+                val step = stepDraft.step
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
                         checked = step.isCompleted,
                         onCheckedChange = { checked ->
                             val now = System.currentTimeMillis()
-                            val updated = steps.mapIndexed { i, old -> if (i == index) old.copy(isCompleted = checked, completedAt = if (checked) now else null, updatedAt = now) else old }
-                            steps = updated
-                            status = statusAfterStepChange(status, updated)
+                            val updated = draft.steps.mapIndexed { i, old ->
+                                if (i == index) old.copy(step = old.step.copy(isCompleted = checked, completedAt = if (checked) now else null, updatedAt = now)) else old
+                            }
+                            viewModel.updateDraft { it.copy(steps = updated, status = statusAfterStepChange(it.status, updated.map { item -> item.step })) }
                         },
                     )
                     AppOutlinedTextField(
                         value = step.title,
-                        onValueChange = { value -> steps = steps.mapIndexed { i, old -> if (i == index) old.copy(title = value) else old } },
-                        modifier = Modifier.weight(1f).then(if (index == steps.lastIndex && step.title.isEmpty()) Modifier.focusRequester(focusRequester) else Modifier),
+                        onValueChange = { value ->
+                            viewModel.updateDraft { it.copy(steps = it.steps.mapIndexed { i, old -> if (i == index) old.copy(step = old.step.copy(title = value)) else old }) }
+                        },
+                        modifier = Modifier.weight(1f).then(if (index == draft.steps.lastIndex && step.title.isEmpty()) Modifier.focusRequester(focusRequester) else Modifier),
                         label = { Text(stringResource(R.string.step_name)) },
                         singleLine = true,
                         isError = stepsError && step.title.trim().isEmpty(),
@@ -330,12 +318,12 @@ fun ScheduleEditorScreen(
                             }
                         },
                     )
-                    IconButton(onClick = { steps = steps.filterIndexed { i, _ -> i != index } }) { Icon(Icons.Default.DeleteOutline, stringResource(R.string.delete_step)) }
+                    IconButton(onClick = { viewModel.updateDraft { it.copy(steps = it.steps.filterIndexed { i, _ -> i != index }) } }) { Icon(Icons.Default.DeleteOutline, stringResource(R.string.delete_step)) }
                 }
             }
             if (stepsError) Text(stringResource(R.string.step_required), color = MaterialTheme.colorScheme.error)
             TextButton(
-                onClick = { if (steps.lastOrNull()?.title?.trim()?.isNotEmpty() != false) steps = steps + newStep(schedule.id) },
+                onClick = { if (steps.lastOrNull()?.title?.trim()?.isNotEmpty() != false) viewModel.addStep() },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.add_step)) }
         }
@@ -344,7 +332,7 @@ fun ScheduleEditorScreen(
             headlineContent = { Text(stringResource(R.string.schedule_reminder_label)) },
             supportingContent = {
                 Text(
-                    if (reminderEnabled) {
+                    if (draft.reminderEnabled) {
                         stringResource(
                             R.string.schedule_reminder_enabled_supporting,
                             reminderDescription(reminderMinutes ?: defaultReminderMinutes.toLong()),
@@ -356,19 +344,19 @@ fun ScheduleEditorScreen(
             },
             trailingContent = {
                 Switch(
-                    checked = reminderEnabled,
-                    onCheckedChange = {
-                        reminderEnabled = it
+                checked = draft.reminderEnabled,
+                onCheckedChange = {
+                        viewModel.updateDraft { draft -> draft.copy(reminderEnabled = it) }
                         reminderSubmitted = false
                     },
                 )
             },
         )
-        if (reminderEnabled) {
+        if (draft.reminderEnabled) {
             AppOutlinedTextField(
-                value = reminderText,
+                value = draft.reminderText,
                 onValueChange = {
-                    reminderText = it
+                    viewModel.updateDraft { draft -> draft.copy(reminderText = it) }
                     reminderSubmitted = false
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -386,32 +374,31 @@ fun ScheduleEditorScreen(
                 titleSubmitted = true
                 stepsSubmitted = true
                 reminderSubmitted = true
-                val normalizedSteps = steps.map { it.copy(title = it.title.trim()) }
-                if (title.trim().isNotEmpty() && startDate <= endDate && normalizedSteps.none { it.title.isEmpty() } && (!reminderEnabled || reminderMinutes != null)) {
-                    val updated = schedule.copy(
-                        title = title,
-                        note = note,
-                        category = category,
-                        startEpochDay = startDate.toEpochDay(),
-                        endEpochDay = endDate.toEpochDay(),
-                        minuteOfDay = parsedTime?.let { it.hour * 60 + it.minute },
-                        status = status,
-                        remindBeforeMinutes = if (reminderEnabled) reminderMinutes else null,
+                val normalizedSteps = draft.steps.map { it.step.copy(title = it.step.title.trim()) }
+                if (draft.title.trim().isNotEmpty() && draft.startEpochDay <= draft.endEpochDay && normalizedSteps.none { it.title.isEmpty() } && (!draft.reminderEnabled || reminderMinutes != null)) {
+                    val updated = draft.toScheduleEntity(schedule).copy(
+                        title = draft.title,
+                        remindBeforeMinutes = if (draft.reminderEnabled) reminderMinutes else null,
                     )
                     val notificationAvailable = NotificationAccess.status(context).canPost
                     viewModel.save(updated, normalizedSteps) {
-                        if (reminderEnabled && !notificationAvailable) notificationUnavailable = true else onSaved(schedule.id == 0L)
+                        if (draft.reminderEnabled && !notificationAvailable) notificationUnavailable = true else onSaved(schedule.id == 0L)
                     }
                 }
             },
             modifier = Modifier.fillMaxWidth(),
-        ) { Text(stringResource(R.string.save_schedule)) }
+            enabled = !state.isSaving,
+        ) {
+            if (state.isSaving) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            else Text(stringResource(R.string.save_schedule))
+        }
+        if (state.saveFailed) Text(stringResource(R.string.schedule_save_failed), color = MaterialTheme.colorScheme.error)
         Spacer(Modifier.height(AppSpacing.ScreenBottom))
     }
     }
 
     datePickerTarget?.let { target ->
-        val initial = if (target == DateTarget.START) startDate else endDate
+        val initial = LocalDate.ofEpochDay(if (target == DateTarget.START) draft.startEpochDay else draft.endEpochDay)
         val initialMillis = initial.toEpochDay() * 86_400_000L
         val pickerState = rememberDatePickerState(
             initialSelectedDateMillis = initialMillis,
@@ -424,10 +411,16 @@ fun ScheduleEditorScreen(
                 TextButton(onClick = {
                     pickerState.selectedDateMillis?.let { millis ->
                         val selected = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
-                        if (target == DateTarget.START) {
-                            startDate = selected
-                            if (endDate.isBefore(selected)) endDate = selected
-                        } else if (!selected.isBefore(startDate)) endDate = selected
+                        viewModel.updateDraft { current ->
+                            if (target == DateTarget.START) {
+                                current.copy(
+                                    startEpochDay = selected.toEpochDay(),
+                                    endEpochDay = maxOf(current.endEpochDay, selected.toEpochDay()),
+                                )
+                            } else if (selected.toEpochDay() >= current.startEpochDay) {
+                                current.copy(endEpochDay = selected.toEpochDay())
+                            } else current
+                        }
                     }
                     datePickerTarget = null
                 }) { Text(stringResource(R.string.confirm)) }
@@ -455,12 +448,12 @@ fun ScheduleEditorScreen(
             cancelLabel = stringResource(R.string.cancel),
             clearLabel = stringResource(R.string.schedule_deadline_clear),
             onConfirm = { hour, minute ->
-                timeText = "%02d:%02d".format(hour, minute)
+                viewModel.updateDraft { it.copy(minuteOfDay = hour * 60 + minute) }
                 timePickerVisible = false
             },
             onCancel = { timePickerVisible = false },
             onClear = {
-                timeText = ""
+                viewModel.updateDraft { it.copy(minuteOfDay = null) }
                 timePickerVisible = false
             },
         )
@@ -489,16 +482,21 @@ fun ScheduleEditorScreen(
                 Row {
                     TextButton(onClick = { pendingType = null }) { Text(stringResource(R.string.cancel)) }
                     TextButton(onClick = {
-                        category = type.type.name
+                        viewModel.updateDraft { it.copy(category = type.type.name) }
                         pendingType = null
                     }) { Text(stringResource(R.string.only_change_schedule_type)) }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    category = type.type.name
-                    steps = viewModel.stepsFromType(type, schedule.id)
-                    status = statusAfterStepChange(status, steps)
+                    val typeSteps = viewModel.stepsFromType(type, schedule.id)
+                    viewModel.updateDraft {
+                        it.copy(
+                            category = type.type.name,
+                            steps = typeSteps,
+                            status = statusAfterStepChange(it.status, typeSteps.map { item -> item.step }),
+                        )
+                    }
                     pendingType = null
                 }) { Text(stringResource(R.string.replace_steps_with_template)) }
             },
@@ -507,10 +505,6 @@ fun ScheduleEditorScreen(
 }
 
 private enum class DateTarget { START, END }
-
-private fun newStep(scheduleId: Long) = ScheduleStepEntity(scheduleId = scheduleId, title = "", position = 0)
-
-private fun parseTime(value: String): LocalTime? = if (value.isBlank()) null else runCatching { LocalTime.parse(value.trim()) }.getOrNull()
 
 @Composable
 private fun reminderDescription(minutes: Long): String = when {

@@ -7,6 +7,7 @@ import com.datenote.app.data.local.ScheduleEntity
 import com.datenote.app.data.local.ScheduleStepEntity
 import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.data.repository.ScheduleRepository
+import com.datenote.app.data.repository.UserPreferencesRepository
 import com.datenote.app.domain.model.ScheduleStatus
 import com.datenote.app.domain.model.sortForAll
 import com.datenote.app.reminder.ReminderScheduler
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -23,7 +25,7 @@ enum class ScheduleFilter { ALL, UNCOMPLETED, RECENT, TODAY, OVERDUE, COMPLETED 
 class AllSchedulesViewModel(
     private val repository: ScheduleRepository,
     private val reminderScheduler: ReminderScheduler,
-    private val defaultReminderTimeMinutes: Int,
+    private val preferencesRepository: UserPreferencesRepository,
 ) : ViewModel() {
     private val selectedFilter = MutableStateFlow(ScheduleFilter.ALL)
     private val searchQuery = MutableStateFlow("")
@@ -63,14 +65,14 @@ class AllSchedulesViewModel(
                 updatedAt = System.currentTimeMillis(),
             )
             repository.update(updated)
-            reminderScheduler.sync(updated, defaultReminderTimeMinutes)
+            syncReminder(updated)
         }
     }
 
     fun markCompleted(schedule: ScheduleWithSteps, completeSteps: Boolean) {
         viewModelScope.launch {
             repository.setStatus(schedule.schedule.id, ScheduleStatus.COMPLETED, completeSteps)?.let {
-                reminderScheduler.sync(it, defaultReminderTimeMinutes)
+                syncReminder(it)
             }
         }
     }
@@ -78,7 +80,7 @@ class AllSchedulesViewModel(
     fun toggleStep(schedule: ScheduleWithSteps, step: ScheduleStepEntity) {
         viewModelScope.launch {
             repository.setStepCompleted(schedule.schedule.id, step.id, !step.isCompleted)?.let {
-                reminderScheduler.sync(it, defaultReminderTimeMinutes)
+                syncReminder(it)
             }
         }
     }
@@ -91,18 +93,23 @@ class AllSchedulesViewModel(
                 updatedAt = System.currentTimeMillis(),
             )
             repository.update(updated)
-            reminderScheduler.sync(updated, defaultReminderTimeMinutes)
+            syncReminder(updated)
         }
     }
 
     fun delete(schedule: ScheduleWithSteps) { viewModelScope.launch { repository.delete(schedule.schedule); reminderScheduler.cancel(schedule.schedule.id) } }
 
+    private suspend fun syncReminder(schedule: ScheduleEntity) {
+        val reminderTime = preferencesRepository.preferences.first().defaultReminderTimeMinutes
+        reminderScheduler.sync(schedule, reminderTime)
+    }
+
     class Factory(
         private val repository: ScheduleRepository,
         private val reminderScheduler: ReminderScheduler,
-        private val defaultReminderTimeMinutes: Int,
+        private val preferencesRepository: UserPreferencesRepository,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T = AllSchedulesViewModel(repository, reminderScheduler, defaultReminderTimeMinutes) as T
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = AllSchedulesViewModel(repository, reminderScheduler, preferencesRepository) as T
     }
 }

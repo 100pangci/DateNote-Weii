@@ -114,6 +114,14 @@ interface ScheduleDao {
     }
 
     @Transaction
+    suspend fun saveAllWithSteps(schedules: List<ScheduleWithSteps>): List<Long> = schedules.map { item ->
+        saveWithSteps(
+            item.schedule.copy(id = 0L),
+            item.orderedSteps.map { it.copy(id = 0L, scheduleId = 0L) },
+        )
+    }
+
+    @Transaction
     suspend fun setStepCompleted(scheduleId: Long, stepId: Long, completed: Boolean): ScheduleEntity? {
         val current = getWithSteps(scheduleId) ?: return null
         val now = System.currentTimeMillis()

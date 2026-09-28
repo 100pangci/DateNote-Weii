@@ -40,7 +40,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -61,6 +60,7 @@ import com.datenote.app.data.local.ScheduleWithSteps
 import com.datenote.app.data.local.ScheduleTypeWithSteps
 import com.datenote.app.data.remote.AiRepository
 import com.datenote.app.data.repository.ScheduleRepository
+import com.datenote.app.data.repository.UserPreferencesRepository
 import com.datenote.app.reminder.ReminderScheduler
 import com.datenote.app.reminder.NotificationAccess
 import com.datenote.app.ui.reminder.NotificationUnavailableDialog
@@ -68,85 +68,63 @@ import com.datenote.app.ui.components.AppCard
 import com.datenote.app.ui.components.AppOutlinedTextField
 import com.datenote.app.ui.components.AppPrimaryButton
 import com.datenote.app.ui.components.ReorderableColumn
-import com.datenote.app.ui.components.ReorderableItem
 import com.datenote.app.ui.components.moveItem
 import com.datenote.app.ui.components.AppSoftTextField
 import com.datenote.app.ui.theme.AppSpacing
-import com.datenote.app.domain.parser.ParsedSchedule
-import com.datenote.app.domain.parser.ParsedStep
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.Instant
 import java.time.ZoneOffset
 
-private data class EditableAiDraft(
-    val id: Long,
-    val title: String,
-    val startDate: String,
-    val endDate: String,
-    val time: String,
-    val category: String,
-    val note: String,
-    val reminder: String,
-    val reminderEnabled: Boolean,
-    val steps: List<EditableAiStep>,
-    val confidence: Double,
-    val uncertainties: List<String>,
-)
-
-private data class EditableAiStep(val id: Long, val title: String, val isCompleted: Boolean) : ReorderableItem {
-    override val stableId: Long
-        get() = id
-}
-
 @Composable
 fun AiInputScreen(
     aiRepository: AiRepository,
     repository: ScheduleRepository,
-    defaultReminderMinutes: Int,
     reminderScheduler: ReminderScheduler,
-    defaultReminderTimeMinutes: Int,
+    preferencesRepository: UserPreferencesRepository,
     onRequestNotifications: () -> Unit,
 ) {
-    val viewModel: AiInputViewModel = viewModel(factory = AiInputViewModel.Factory(aiRepository, repository, reminderScheduler, defaultReminderTimeMinutes))
+    val viewModel: AiInputViewModel = viewModel(factory = AiInputViewModel.Factory(aiRepository, repository, reminderScheduler, preferencesRepository))
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var drafts by remember(state.result) {
-        mutableStateOf(state.result?.items.orEmpty().mapIndexed { index, item ->
-            item.toEditable(defaultReminderMinutes, index.toLong(), state.matchedTemplateSteps[index].orEmpty())
-        })
-    }
-    var saveError by remember { mutableStateOf(false) }
-    var saving by remember { mutableStateOf(false) }
     var notificationUnavailable by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    if (state.result == null) {
-        InputPage(state = state, onInput = viewModel::setInput, onSubmit = viewModel::submit)
+    if (!state.reviewing) {
+        InputPage(
+            state = state,
+            onInput = viewModel::setInput,
+            onSubmit = viewModel::submit,
+        )
     } else {
         ReviewPage(
-            drafts = drafts,
+            drafts = state.drafts,
             scheduleTypes = state.scheduleTypes,
-            warnings = state.result?.warnings.orEmpty(),
-            saving = saving,
-            saveError = saveError,
-            onDraftChange = { index, draft -> drafts = drafts.toMutableList().also { it[index] = draft } },
-            onRemove = { index -> drafts = drafts.toMutableList().also { it.removeAt(index) } },
+            warnings = state.warnings,
+            saving = state.isSaving,
+            saveError = when (state.saveError) {
+                AiSaveError.INVALID_DRAFT -> stringResource(R.string.ai_invalid_draft)
+                AiSaveError.SAVE_FAILED -> stringResource(R.string.ai_save_failed)
+                AiSaveError.REMINDER_SYNC_FAILED -> stringResource(R.string.ai_reminder_retry)
+                null -> null
+            },
+            onDraftChange = viewModel::updateDraft,
+            onRemove = viewModel::removeDraft,
+            onAddStep = viewModel::addStep,
+            onApplyType = viewModel::applyType,
             onStartOver = viewModel::startOver,
             onConfirm = {
+                val drafts = state.drafts
                 val schedules = drafts.mapNotNull { it.toScheduleWithStepsOrNull() }
                 if (schedules.size != drafts.size || schedules.isEmpty()) {
-                    saveError = true
+                    viewModel.markInvalidDraft()
                 } else {
-                    saving = true
-                    viewModel.saveSchedules(schedules) { success ->
-                        saving = false
-                        if (success) {
-                            saveError = false
+                    viewModel.saveSchedules(schedules) { result ->
+                        if (result.saved && result.remindersScheduled) {
                             viewModel.clearAfterSaved()
                             if (schedules.any { it.schedule.remindBeforeMinutes != null } && !NotificationAccess.status(context).canPost) {
                                 notificationUnavailable = true
                             }
-                        } else saveError = true
+                        }
                     }
                 }
             },
@@ -159,10 +137,7 @@ fun AiInputScreen(
                 onRequestNotifications()
                 viewModel.startOver()
             },
-            onLater = {
-                notificationUnavailable = false
-                viewModel.startOver()
-            },
+            onLater = { notificationUnavailable = false; viewModel.startOver() },
         )
     }
 }
@@ -237,9 +212,11 @@ private fun ReviewPage(
     scheduleTypes: List<ScheduleTypeWithSteps>,
     warnings: List<String>,
     saving: Boolean,
-    saveError: Boolean,
+    saveError: String?,
     onDraftChange: (Int, EditableAiDraft) -> Unit,
     onRemove: (Int) -> Unit,
+    onAddStep: (Int) -> Unit,
+    onApplyType: (Int, ScheduleTypeWithSteps, Boolean) -> Unit,
     onStartOver: () -> Unit,
     onConfirm: () -> Unit,
 ) {
@@ -259,9 +236,16 @@ private fun ReviewPage(
             }
         }
         itemsIndexed(drafts, key = { _, draft -> draft.id }) { index, draft ->
-            DraftCard(draft, scheduleTypes, onChange = { onDraftChange(index, it) }, onRemove = { onRemove(index) })
+            DraftCard(
+                draft = draft,
+                scheduleTypes = scheduleTypes,
+                onChange = { onDraftChange(index, it) },
+                onRemove = { onRemove(index) },
+                onAddStep = { onAddStep(index) },
+                onApplyType = { type, replaceSteps -> onApplyType(index, type, replaceSteps) },
+            )
         }
-        if (saveError) item { Text(stringResource(R.string.ai_invalid_draft), color = MaterialTheme.colorScheme.error) }
+        if (saveError != null) item { Text(saveError, color = MaterialTheme.colorScheme.error) }
         item {
             AppPrimaryButton(
                 onClick = onConfirm,
@@ -292,12 +276,13 @@ private fun DraftCard(
     scheduleTypes: List<ScheduleTypeWithSteps>,
     onChange: (EditableAiDraft) -> Unit,
     onRemove: () -> Unit,
+    onAddStep: () -> Unit,
+    onApplyType: (ScheduleTypeWithSteps, Boolean) -> Unit,
 ) {
     var datePickerTarget by rememberSaveable(draft.id) { mutableStateOf<AiDateTarget?>(null) }
     var expanded by rememberSaveable(draft.id) { mutableStateOf(true) }
     var typeMenuVisible by remember { mutableStateOf(false) }
     var pendingType by remember { mutableStateOf<ScheduleTypeWithSteps?>(null) }
-    var nextStepId by remember { mutableLongStateOf(-1L) }
     val focusManager = LocalFocusManager.current
     AppCard(Modifier.fillMaxWidth(), containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.padding(AppSpacing.Content), verticalArrangement = Arrangement.spacedBy(AppSpacing.Compact)) {
@@ -367,12 +352,7 @@ private fun DraftCard(
                                         typeMenuVisible = false
                                         if (draft.category.trim() != type.type.name) {
                                             if (draft.steps.isNotEmpty() && type.orderedSteps.isNotEmpty()) pendingType = type
-                                            else onChange(
-                                                draft.copy(
-                                                    category = type.type.name,
-                                                    steps = if (draft.steps.isEmpty()) type.toScheduleSteps(0).map { EditableAiStep(it.position.toLong(), it.title, false) } else draft.steps,
-                                                ),
-                                            )
+                                            else onApplyType(type, true)
                                         }
                                     },
                                 )
@@ -419,7 +399,7 @@ private fun DraftCard(
                         TextButton(onClick = { onChange(draft.copy(steps = draft.steps.filterIndexed { index, _ -> index != stepIndex })) }) { Text(stringResource(R.string.delete_step)) }
                     }
                 }
-                TextButton(onClick = { onChange(draft.copy(steps = draft.steps + EditableAiStep(nextStepId--, "", false))) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.add_step)) }
+                TextButton(onClick = onAddStep, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.add_step)) }
                 Text(stringResource(R.string.ai_confidence, (draft.confidence * 100).toInt()), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
                 if (draft.uncertainties.isNotEmpty()) {
                     Text(stringResource(R.string.ai_uncertain_title), color = MaterialTheme.colorScheme.error)
@@ -491,19 +471,14 @@ private fun DraftCard(
                     TextButton(onClick = { pendingType = null }) { Text(stringResource(R.string.cancel)) }
                     TextButton(onClick = {
                         pendingType = null
-                        onChange(draft.copy(category = type.type.name))
+                        onApplyType(type, false)
                     }) { Text(stringResource(R.string.only_change_schedule_type)) }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
                     pendingType = null
-                    onChange(
-                        draft.copy(
-                            category = type.type.name,
-                            steps = type.toScheduleSteps(0).map { EditableAiStep(it.position.toLong(), it.title, false) },
-                        ),
-                    )
+                    onApplyType(type, true)
                 }) { Text(stringResource(R.string.replace_steps_with_template)) }
             },
         )
@@ -528,22 +503,6 @@ private fun AiDateButton(
 private enum class AiDateTarget { START, END }
 
 private fun String.toLocalDateOrNull(): LocalDate? = runCatching { LocalDate.parse(trim()) }.getOrNull()
-
-private fun ParsedSchedule.toEditable(defaultReminder: Int, id: Long, templateSteps: List<String>): EditableAiDraft = EditableAiDraft(
-    id = id,
-    title = title,
-    startDate = startDate.toString(),
-    endDate = endDate.toString(),
-    time = time?.toString()?.take(5).orEmpty(),
-    category = category.orEmpty(),
-    note = note,
-    reminder = (remindBeforeMinutes ?: defaultReminder.toLong()).toString(),
-    reminderEnabled = remindBeforeMinutes != null,
-    steps = if (steps.isEmpty()) templateSteps.mapIndexed { index, title -> EditableAiStep(index.toLong(), title, false) }
-    else steps.mapIndexed { index, step -> EditableAiStep(index.toLong(), step.title, step.isCompleted) },
-    confidence = confidence,
-    uncertainties = uncertainties,
-)
 
 private fun EditableAiDraft.toScheduleWithStepsOrNull(): ScheduleWithSteps? {
     val parsedStart = runCatching { LocalDate.parse(startDate.trim()) }.getOrNull() ?: return null

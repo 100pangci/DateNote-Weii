@@ -88,6 +88,7 @@
     <string name="reminder_before_days">提前 %1$d 天提醒</string>
     <string name="reminder_before_weeks">提前 %1$d 周提醒</string>
     <string name="save_schedule">记好啦</string>
+    <string name="schedule_save_failed">保存没有成功，草稿还在，请稍后重试</string>
     <string name="production_steps">制作进度</string>
     <string name="no_steps_message">还没有添加制作步骤\n把过程拆开，就不容易忘记啦</string>
     <string name="add_first_step">添加第一步</string>
@@ -163,6 +164,8 @@
     <string name="ai_parse_error">这句话我暂时没理解好\n原来的内容还在，可以修改后再试一次</string>
     <string name="ai_empty_error">这次没找到明确的排期\n可以换种说法再告诉我一次</string>
     <string name="ai_invalid_draft">有一条安排还需要补充正确的日期或时间</string>
+    <string name="ai_save_failed">这批安排没有保存成功，草稿还在，请稍后重试</string>
+    <string name="ai_reminder_retry">安排已经写入，但提醒没有全部设置好；再次确认只会重试提醒，不会重复创建安排</string>
     <string name="settings_personalization">称呼与个性化</string>
     <string name="settings_schedule_cards">排期卡片</string>
     <string name="default_expand_steps">默认展开制作进度</string>

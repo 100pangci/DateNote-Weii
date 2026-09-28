@@ -53,7 +53,14 @@ class SettingsViewModel(
     fun setThemeMode(value: ThemeMode) { viewModelScope.launch { preferencesRepository.setThemeMode(value) } }
     fun setDynamicColor(value: Boolean) { viewModelScope.launch { preferencesRepository.setDynamicColor(value) } }
     fun setDefaultReminder(value: Int) { viewModelScope.launch { preferencesRepository.setDefaultReminderMinutes(value) } }
-    fun setDefaultReminderTime(value: Int) { viewModelScope.launch { preferencesRepository.setDefaultReminderTimeMinutes(value) } }
+    fun setDefaultReminderTime(value: Int) {
+        if (value !in 0..1439) return
+        viewModelScope.launch {
+            preferencesRepository.setDefaultReminderTimeMinutes(value)
+            val schedules = scheduleRepository.observeAll().first()
+            reminderScheduler.rescheduleAll(schedules, value)
+        }
+    }
     fun setDefaultExpandSteps(value: Boolean) { viewModelScope.launch { preferencesRepository.setDefaultExpandSteps(value) } }
     fun setAutoCollapseCompletedSteps(value: Boolean) { viewModelScope.launch { preferencesRepository.setAutoCollapseCompletedSteps(value) } }
 
@@ -102,8 +109,9 @@ class SettingsViewModel(
             val result = runCatching {
                 scheduleRepository.restoreAllWithSteps(schedules, types, replace)
                 if (replace) reminderScheduler.cancelAll()
+                val reminderTime = preferencesRepository.preferences.first().defaultReminderTimeMinutes
                 scheduleRepository.observeAll().first().forEach { schedule ->
-                    reminderScheduler.sync(schedule, _state.value.preferences.defaultReminderTimeMinutes)
+                    reminderScheduler.sync(schedule, reminderTime)
                 }
             }
             onFinished(result.isSuccess)

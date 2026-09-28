@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.datenote.app.R
 import com.datenote.app.data.local.ScheduleWithSteps
+import com.datenote.app.data.repository.UserPreferencesRepository
 import com.datenote.app.data.repository.ScheduleRepository
 import com.datenote.app.reminder.ReminderScheduler
 import com.datenote.app.domain.model.ScheduleStatus
@@ -53,12 +54,12 @@ import com.datenote.app.ui.theme.AppSpacing
 fun AllSchedulesScreen(
     repository: ScheduleRepository,
     reminderScheduler: ReminderScheduler,
-    defaultReminderTimeMinutes: Int,
+    preferencesRepository: UserPreferencesRepository,
     defaultExpandSteps: Boolean,
     autoCollapseCompletedSteps: Boolean,
     onEdit: (Long) -> Unit,
 ) {
-    val viewModel: AllSchedulesViewModel = viewModel(factory = AllSchedulesViewModel.Factory(repository, reminderScheduler, defaultReminderTimeMinutes))
+    val viewModel: AllSchedulesViewModel = viewModel(factory = AllSchedulesViewModel.Factory(repository, reminderScheduler, preferencesRepository))
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
     val schedules by viewModel.schedules.collectAsStateWithLifecycle()

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
@@ -11,12 +12,16 @@ import com.datenote.app.DateNoteApplication
 import com.datenote.app.R
 import com.datenote.app.domain.model.ScheduleStatus
 import com.datenote.app.domain.model.progress
+import com.datenote.app.domain.model.hasValidDateAndReminderRange
 import com.datenote.app.data.local.ScheduleEntity
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 object ReminderNotifications {
     const val CHANNEL_ID = "schedule_reminders"
@@ -55,14 +60,66 @@ class ReminderScheduler(private val context: Context) {
     fun cancelAll() { workManager.cancelAllWorkByTag(ReminderNotifications.WORK_TAG) }
 
     suspend fun rescheduleAll(schedules: List<ScheduleEntity>, defaultReminderTimeMinutes: Int) {
+        val now = Instant.now()
+        val existingWork = queryReminderWork() ?: return
+        val dueOrRunningIds = existingWork
+            .filter { info ->
+                shouldPreserveDueWorkOnResume(
+                    isEnqueued = info.state == WorkInfo.State.ENQUEUED,
+                    isRunning = info.state == WorkInfo.State.RUNNING,
+                    nextScheduleTimeMillis = info.nextScheduleTimeMillis,
+                    nowMillis = now.toEpochMilli(),
+                )
+            }
+            .mapNotNull(::scheduleIdFromWorkInfo)
+            .toSet()
+
         if (!NotificationAccess.status(context).canPost) {
-            cancelAll()
+            existingWork.mapNotNull(::scheduleIdFromWorkInfo)
+                .filterNot { it in dueOrRunningIds }
+                .forEach(::cancel)
             return
         }
-        schedules.forEach { sync(it, defaultReminderTimeMinutes) }
+        schedules.forEach { schedule ->
+            if (schedule.remindBeforeMinutes == null || schedule.status == ScheduleStatus.COMPLETED) {
+                cancel(schedule.id)
+                return@forEach
+            }
+            if (schedule.id in dueOrRunningIds) return@forEach
+            val reminderAt = if (schedule.hasValidDateAndReminderRange()) {
+                runCatching {
+                    reminderDateTime(schedule, defaultReminderTimeMinutes)
+                        ?.atZone(ZoneId.systemDefault())
+                        ?.toInstant()
+                }.getOrNull()
+            } else null
+            if (reminderAt == null) {
+                cancel(schedule.id)
+            } else if (shouldScheduleReminderAt(reminderAt, now)) {
+                sync(schedule, defaultReminderTimeMinutes)
+            } else {
+                // A stale target is not replayed. Any old future work for it is removed.
+                cancel(schedule.id)
+            }
+        }
     }
 
-    private fun uniqueName(id: Long): String = "schedule-reminder-$id"
+    private suspend fun queryReminderWork(): List<WorkInfo>? = withContext(Dispatchers.IO) {
+        runCatching { workManager.getWorkInfosByTag(ReminderNotifications.WORK_TAG).get() }.getOrNull()
+    }
+
+    private fun scheduleIdFromWorkInfo(info: WorkInfo): Long? = info.tags
+        .firstNotNullOfOrNull { tag ->
+            tag.takeIf { it.startsWith(WORK_NAME_PREFIX) }
+                ?.removePrefix(WORK_NAME_PREFIX)
+                ?.toLongOrNull()
+        }
+
+    private fun uniqueName(id: Long): String = "$WORK_NAME_PREFIX$id"
+
+    private companion object {
+        const val WORK_NAME_PREFIX = "schedule-reminder-"
+    }
 }
 
 class ScheduleReminderWorker(
